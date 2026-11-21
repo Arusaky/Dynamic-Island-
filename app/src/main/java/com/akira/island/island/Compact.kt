@@ -13,6 +13,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -105,9 +108,11 @@ import com.akira.island.core.MsgAction
 import com.akira.island.core.ReplyState
 import com.akira.island.core.MediaInfo
 import com.akira.island.core.Notice
+import com.akira.island.core.NoticeEffect
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.core.formatDuration
+import com.akira.island.data.ExpandStyle
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.MessageStyle
 import com.akira.island.data.MessageIconMode
@@ -463,7 +468,7 @@ private fun WideNotice(n: Notice, s: IslandSettings, wideWidth: Dp) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Icon(n.icon, null, tint = n.tint, modifier = Modifier.size(height * 0.355f).scale(pop.value))
+            Icon(n.icon, null, tint = n.tint, modifier = Modifier.size(height * 0.355f).graphicsLayer { scaleX = pop.value; scaleY = pop.value })
             Spacer(Modifier.width(9.dp))
             // «Не беспокоить», «Режим полёта» не влезают до камеры — шрифт чуть меньше, а не многоточие
             FitText(n.title, Color.White, 17.sp, 13.sp, FontWeight.SemiBold.island, Modifier.weight(1f, fill = false))
@@ -477,7 +482,7 @@ private fun WideNotice(n: Notice, s: IslandSettings, wideWidth: Dp) {
             }
             if (n.battery != null) {
                 Spacer(Modifier.width(8.dp))
-                BatteryGlyph((n.battery * fill.value).toInt(), n.tint, Modifier.size(30.dp, 14.dp))
+                BatteryGlyph(n.battery, n.tint, Modifier.size(30.dp, 14.dp), fill = { fill.value })
             }
             if (n.ring != null) {
                 Spacer(Modifier.width(8.dp))
@@ -491,30 +496,35 @@ private fun WideNotice(n: Notice, s: IslandSettings, wideWidth: Dp) {
 @Composable
 private fun PillNotice(n: Notice, s: IslandSettings) {
     val h = activeHeight(s)
-    val swing = remember(n.id) { Animatable(0f) }
-    LaunchedEffect(n.id) {
-        if (s.reduceEffects || !s.fxShake) return@LaunchedEffect
-        // Затухающее покачивание: 22° → -16° → 12° → … → 0
-        var amp = 22f
-        repeat(6) {
-            swing.animateTo(amp, tween(70))
-            amp = -amp * 0.75f
+    val ringer = n.effect == NoticeEffect.RINGER
+    val duration = if (s.reduceEffects || s.expandStyle == ExpandStyle.INSTANT) 0
+        else (150 * motionScale(s)).toInt()
+    val swing = remember { Animatable(0f) }
+    LaunchedEffect(n.id, s.reduceEffects, s.fxShake, s.expandStyle) {
+        if (duration == 0 || !s.fxShake) {
+            swing.snapTo(0f)
+            return@LaunchedEffect
         }
-        swing.animateTo(0f, spring(dampingRatio = 0.5f))
+        swing.animateTo(if (ringer) 12f else 22f, tween(55))
+        swing.animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 550f))
     }
+    val tint by animateColorAsState(n.tint, tween(duration), label = "pillTint")
     CompactRow(h, compactGap(s), h * 2.4f,
         left = {
-            Icon(
-                n.icon, null, tint = n.tint,
+            Crossfade(n.icon, animationSpec = tween(duration), label = "pillIcon",
                 modifier = Modifier.size(h * 0.5f).graphicsLayer {
                     rotationZ = swing.value
                     transformOrigin = TransformOrigin(0.5f, 0.1f)
-                },
-            )
+                }) { icon -> Icon(icon, null, tint = tint, modifier = Modifier.fillMaxSize()) }
         },
         right = {
-            if (n.state != null) {
-                Text(n.state, color = n.tint, fontSize = 16.sp, fontWeight = FontWeight.SemiBold.island, maxLines = 1, softWrap = false)
+            AnimatedContent(n.state, contentAlignment = Alignment.CenterEnd, label = "pillLabel",
+                transitionSpec = {
+                    (fadeIn(tween(duration)) togetherWith fadeOut(tween(duration / 2)))
+                        .using(SizeTransform { _, _ -> tween(duration) })
+                }) { label ->
+                if (label != null) Text(label, color = tint, fontSize = 16.sp, fontWeight = FontWeight.SemiBold.island,
+                    maxLines = 1, softWrap = false)
             }
         },
         // Как в ролике: подпись в полный размер, пилюля для неё чуть шире

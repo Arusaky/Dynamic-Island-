@@ -67,6 +67,7 @@ import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
 import com.akira.island.core.MsgAction
 import com.akira.island.core.Notice
+import com.akira.island.core.NoticeEffect
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.PayReady
 import com.akira.island.core.Tints
@@ -372,11 +373,11 @@ private fun DemoTile(d: Demo, modifier: Modifier, onClick: () -> Unit) {
 
 private fun demos(context: Context): List<Demo> = listOf(
     Demo(Icons.Rounded.Bolt, tr("Событие", "Event"), tr("Зарядка 75% во всю ширину", "Charging 75% at full width"), Tile.Green) {
-        IslandBus.post(Notice(tr("Зарядка", "Charging"), "75%", Ios.load(context, R.drawable.ios_flash), Tints.Green, battery = 75))
+        IslandBus.post(Notice(tr("Зарядка", "Charging"), "75%", Ios.load(context, R.drawable.ios_flash), Tints.Green, battery = 75, effect = NoticeEffect.CHARGING))
     },
     Demo(Icons.Rounded.NotificationsOff, tr("Режим звука", "Ring mode"),
         tr("Капсула вздрагивает, колокольчик качается", "The capsule shakes, the bell swings"), Tile.Red) {
-        IslandBus.post(Notice("", tr("Без звука", "Silent"), Ios.load(context, R.drawable.ios_notifications_off), Tints.Red, style = NoticeStyle.PILL))
+        IslandBus.post(Notice("", tr("Без звука", "Silent"), Ios.load(context, R.drawable.ios_notifications_off), Tints.Red, style = NoticeStyle.PILL, effect = NoticeEffect.RINGER))
     },
     Demo(Icons.Rounded.ChatBubble, tr("Сообщение", "Message"),
         tr("С кнопками «Ответить» и «Пометить прочитанным»", "With Reply and Mark as read buttons"), Tile.Blue) {

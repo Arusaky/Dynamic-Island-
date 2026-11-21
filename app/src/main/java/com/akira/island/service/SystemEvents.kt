@@ -32,6 +32,7 @@ import com.akira.island.core.BatteryInfo
 import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
 import com.akira.island.core.Notice
+import com.akira.island.core.NoticeEffect
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.R
@@ -284,7 +285,7 @@ class SystemEvents(private val context: Context) {
                 notice(
                     s.evChargeStart,
                     Notice(tr("Зарядка", "Charging"), if (level >= 0) "$level%" else null, ic(R.drawable.ios_flash), Tints.Green,
-                        battery = level.takeIf { it >= 0 }),
+                        battery = level.takeIf { it >= 0 }, effect = NoticeEffect.CHARGING),
                 )
             }
 
@@ -348,11 +349,11 @@ class SystemEvents(private val context: Context) {
                 if (mode >= 0) IslandBus.ringer.value = mode
                 val n = when (mode) {
                     // Как переключатель «Звонок/Бесшумно» на iPhone: короткая пилюля, колокольчик качается
-                    AudioManager.RINGER_MODE_NORMAL -> Notice("", tr("Звонок", "Ring"), ic(R.drawable.ios_notifications), Color.White, style = NoticeStyle.PILL)
+                    AudioManager.RINGER_MODE_NORMAL -> Notice("", tr("Звонок", "Ring"), ic(R.drawable.ios_notifications), Color.White, style = NoticeStyle.PILL, effect = NoticeEffect.RINGER)
                     AudioManager.RINGER_MODE_VIBRATE -> Notice("", tr("Вибрация", "Vibrate"), ic(R.drawable.ios_phone_portrait),
-                        Tints.Purple, style = NoticeStyle.PILL)
+                        Tints.Purple, style = NoticeStyle.PILL, effect = NoticeEffect.RINGER)
                     AudioManager.RINGER_MODE_SILENT -> Notice("", tr("Без звука", "Silent"), ic(R.drawable.ios_notifications_off),
-                        Tints.Red, style = NoticeStyle.PILL)
+                        Tints.Red, style = NoticeStyle.PILL, effect = NoticeEffect.RINGER)
                     else -> null
                 }
                 if (n != null) notice(s.evRinger, n)

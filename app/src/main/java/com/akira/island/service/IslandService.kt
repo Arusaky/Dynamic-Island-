@@ -590,7 +590,9 @@ class IslandService : AccessibilityService() {
     private fun scheduleTouchWindow() {
         if (touchPending) return
         touchPending = true
-        handler.postDelayed(touchUpdate, 16)
+        val view = display
+        if (view?.isAttachedToWindow == true) view.postOnAnimation(touchUpdate)
+        else handler.post(touchUpdate)
     }
 
     private fun updateTouchWindow() {
@@ -865,6 +867,7 @@ class IslandService : AccessibilityService() {
         stopService(Intent(this, KeepAliveService::class.java))
         handler.removeCallbacks(shoot)
         handler.removeCallbacks(showAgain)
+        display?.removeCallbacks(touchUpdate)
         handler.removeCallbacks(touchUpdate)
         runCatching { displays?.unregisterDisplayListener(displayListener) }
         IslandBus.egg.value = false

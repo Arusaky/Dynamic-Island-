@@ -273,14 +273,14 @@ fun Equalizer(color: Color, playing: Boolean, animate: Boolean, modifier: Modifi
 
 /** Батарейка как в iOS: заливка по уровню заряда и «носик» справа. */
 @Composable
-fun BatteryGlyph(level: Int, color: Color, modifier: Modifier = Modifier) {
+fun BatteryGlyph(level: Int, color: Color, modifier: Modifier = Modifier, fill: () -> Float = { 1f }) {
     Canvas(modifier) {
         val nub = size.height * 0.16f
         val bodyW = size.width - nub - 1.5.dp.toPx()
         val r = size.height * 0.32f
         drawRoundRect(color.copy(alpha = 0.3f), size = Size(bodyW, size.height), cornerRadius = CornerRadius(r))
         val inset = size.height * 0.14f
-        val fillW = (bodyW - inset * 2) * (level.coerceIn(0, 100) / 100f)
+        val fillW = (bodyW - inset * 2) * (level.coerceIn(0, 100) / 100f) * fill().coerceIn(0f, 1f)
         if (fillW > 0f) {
             drawRoundRect(
                 color,

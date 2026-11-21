@@ -9,6 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.akira.island.core.Notice
+import com.akira.island.core.NoticeEffect
+import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.service.ConnectionEvent
 import com.akira.island.service.SystemEventObservation
@@ -227,8 +229,11 @@ private fun eventExample(old: IslandSettings, s: IslandSettings): Notice? {
     if (old.evVpn != s.evVpn) return ConnectionEvent.VPN.notice(s.evVpn)
     if (old.evHotspot != s.evHotspot) return ConnectionEvent.HOTSPOT.notice(s.evHotspot)
     if (old.evDebugging != s.evDebugging) return ConnectionEvent.USB_DEBUG.notice(s.evDebugging)
+    if (old.evChargeStart != s.evChargeStart) return Notice(tr("Зарядка", "Charging"), "75%",
+        Icons.Rounded.Bolt, Tints.Green, battery = 75, effect = NoticeEffect.CHARGING)
+    if (old.evRinger != s.evRinger) return Notice("", tr("Вибрация", "Vibrate"), Icons.Rounded.Vibration,
+        Tints.Purple, style = NoticeStyle.PILL, effect = NoticeEffect.RINGER)
     val change = listOf(
-        Triple(old.evChargeStart != s.evChargeStart, tr("Зарядка", "Charging"), Icons.Rounded.Bolt),
         Triple(old.evChargeStop != s.evChargeStop, tr("Зарядка остановлена", "Charging stopped"), Icons.Rounded.PowerOff),
         Triple(old.evLowBattery != s.evLowBattery, tr("Низкий заряд", "Low battery"), Icons.Rounded.BatteryAlert),
         Triple(old.evWifiOn != s.evWifiOn, "Wi-Fi", Icons.Rounded.Wifi),
@@ -238,7 +243,6 @@ private fun eventExample(old: IslandSettings, s: IslandSettings): Notice? {
         Triple(old.evUsbOn != s.evUsbOn || old.evUsbOff != s.evUsbOff, "USB", Icons.Rounded.Usb),
         Triple(old.evAirplaneOn != s.evAirplaneOn || old.evAirplaneOff != s.evAirplaneOff, tr("Режим полёта", "Airplane mode"), Icons.Rounded.AirplanemodeActive),
         Triple(old.evDnd != s.evDnd, tr("Не беспокоить", "Do Not Disturb"), Icons.Rounded.DoNotDisturbOn),
-        Triple(old.evRinger != s.evRinger, tr("Режим громкости", "Ring mode"), Icons.Rounded.Vibration),
         Triple(old.evBrightness != s.evBrightness, tr("Яркость", "Brightness"), Icons.Rounded.BrightnessAuto),
         Triple(old.evPayReady != s.evPayReady || old.payHintOnOpen != s.payHintOnOpen, tr("К терминалу", "Hold near reader"), Icons.Rounded.Nfc),
         Triple(old.evPaySuccess != s.evPaySuccess, tr("Оплачено", "Paid"), Icons.Rounded.CheckCircle),

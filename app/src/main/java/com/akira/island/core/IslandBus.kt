@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -94,14 +95,19 @@ object IslandBus {
     private data class QueuedNotice(val notice: Notice, val revision: Long)
     // A burst of messages should not disappear behind a single long-lived card.
     private val queue = Channel<QueuedNotice>(capacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val ringerChanges = Channel<Notice>(Channel.CONFLATED)
     private val messageRevisions = object : LinkedHashMap<String, Long>(128, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?) = size > 256
     }
 
     init {
         scope.launch {
-            for (queued in queue) {
-                val n = queued.notice
+            while (true) {
+                val queued = select<QueuedNotice> {
+                    ringerChanges.onReceive { QueuedNotice(it, 0L) }
+                    queue.onReceive { it }
+                }
+                var n = queued.notice
                 val key = n.message?.key
                 fun removed() = key != null && (messageRevisions[key] ?: 0L) != queued.revision
                 if (removed()) continue
@@ -109,13 +115,20 @@ object IslandBus {
                 // «Задержка появления»; подтверждения того, что вы только что сделали (отправлено, оплачено), — сразу
                 if (s.noticeDelayMs > 0 && n.style != NoticeStyle.SENT && n.style != NoticeStyle.PAY_DONE) delay(s.noticeDelayMs.toLong())
                 if (removed()) continue
+                if (n.effect == NoticeEffect.RINGER) n = ringerChanges.tryReceive().getOrNull() ?: n
                 messageDetail.value = false
                 noticeHold.value = false
                 notice.value = n
                 val message = n.style == NoticeStyle.MESSAGE
                 val duration = if (message && s.messageSeconds > 0) s.messageSeconds * 1000L else s.noticeDurationMs + n.extraMs
                 // Уведомление уходит по времени или раньше, если его смахнули кликом
-                withTimeoutOrNull(duration) { notice.first { it?.id != n.id } }
+                while (true) {
+                    withTimeoutOrNull(duration) { notice.first { it?.id != n.id } }
+                    val next = notice.value
+                    if (n.effect != NoticeEffect.RINGER || next?.effect != NoticeEffect.RINGER || next.id == n.id) break
+                    // A switch in the visible pill starts its own full display interval.
+                    n = next
+                }
                 // «Пока не смахнёте»: плашка ждёт, пока её не уберут; пришло следующее событие — уступает ему
                 if (message && s.messageSeconds < 0 && notice.value?.id == n.id && waitingIsEmpty()) {
                     val seen = posted.value
@@ -137,7 +150,13 @@ object IslandBus {
     private val posted = MutableStateFlow(0)
 
     fun post(n: Notice) {
-        queue.trySend(QueuedNotice(n, n.message?.key?.let { messageRevisions[it] } ?: 0L))
+        if (n.effect == NoticeEffect.RINGER) {
+            val current = notice.value
+            if (current?.effect == NoticeEffect.RINGER && notice.compareAndSet(current, n)) return
+            ringerChanges.trySend(n)
+        } else {
+            queue.trySend(QueuedNotice(n, n.message?.key?.let { messageRevisions[it] } ?: 0L))
+        }
         posted.value++
     }
 
@@ -153,7 +172,7 @@ object IslandBus {
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun waitingIsEmpty(): Boolean = queue.isEmpty
+    private fun waitingIsEmpty(): Boolean = queue.isEmpty && ringerChanges.isEmpty
 }
 
 /** Команды службе: скриншот без острова, блокировка, выключение и прокрутка по явному жесту. */

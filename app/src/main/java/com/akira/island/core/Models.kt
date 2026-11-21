@@ -289,6 +289,8 @@ data class InboxItem(
     val sensitive: Boolean,
 )
 
+enum class NoticeEffect { NONE, CHARGING, RINGER }
+
 /**
  * Короткое событие в стиле iOS: слева значок и подпись, справа состояние.
  * [battery] рисует справа батарейку, [ring] — кольцо (например, заряд наушников),
@@ -320,6 +322,7 @@ data class Notice(
     /** Новая версия для плашки NoticeStyle.UPDATE; null — уже обновились */
     val update: com.akira.island.update.Release? = null,
     val id: Long = ids.incrementAndGet(),
+    val effect: NoticeEffect = NoticeEffect.NONE,
 ) {
     private companion object {
         val ids = AtomicLong()

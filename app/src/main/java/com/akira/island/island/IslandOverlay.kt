@@ -11,7 +11,6 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.updateTransition
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.State
@@ -26,7 +25,6 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.zIndex
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
@@ -52,10 +50,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -70,6 +65,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,6 +87,8 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -108,6 +106,7 @@ import com.akira.island.core.ChronoInfo
 import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
 import com.akira.island.core.Lyrics
+import com.akira.island.core.NoticeEffect
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.core.tr
@@ -142,9 +141,7 @@ val CalibrationRed = Color(0xFFFF6B6B)
 /** Запас вокруг острова в окне: под тень, «желе» и пузырь. */
 const val ISLAND_PAD_DP = 12
 
-private data class Frame(val act: Act, val expanded: Boolean) {
-    val key: String get() = "${act.id}|$expanded"
-}
+private data class Frame(val activityId: String, val expanded: Boolean, val noticeStyle: NoticeStyle?)
 
 @Composable
 fun IslandOverlay(
@@ -330,8 +327,8 @@ fun IslandOverlay(
 
     // Пузырь уходит с анимацией, поэтому помним последнюю активность в нём
     val lastSecondary = remember { arrayOfNulls<Act>(1) }
-    if (secondary != null) lastSecondary[0] = secondary
     val bubbleVisible = secondary != null && !showExpanded
+    if (bubbleVisible) SideEffect { lastSecondary[0] = secondary }
     // Место под пузырь читается при измерении: кадр анимации не пересобирает остров
     val slot = animateDpAsState(if (bubbleVisible) activeHeight(s) + 6.dp else 0.dp, islandSpec(s), label = "slot")
 
@@ -408,8 +405,8 @@ fun IslandOverlay(
             enter = if (s.reduceEffects) fadeIn() else scaleIn(islandSpec(s), initialScale = 0.3f, transformOrigin = top) + fadeIn(tween(120)),
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
-            CompositionLocalProvider(LocalActivities provides acts.filterNot { it.transient }) {
-                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, lastSecondary[0], calibrating, onBody, onBubble, onBackdropShape, onBackdropSampler)
+            CompositionLocalProvider(LocalActivityIds provides acts.filterNot { it.transient }.map { it.id }) {
+                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, if (bubbleVisible) secondary else lastSecondary[0], calibrating, onBody, onBubble, onBackdropShape, onBackdropSampler)
             }
         }
         if (timedHidden) CameraWakeTarget(s, onBounds = { r ->
@@ -462,55 +459,48 @@ internal fun IslandRow(
     onBackdropShape: ((BackdropGeometry) -> Unit)? = null,
     onBackdropSampler: (((() -> Unit)?) -> Unit)? = null,
 ) {
-    Row(
-        Modifier
-            // Сдвиг вбок — для камеры не по центру. Широкие плашки и раскрытый остров при этом не уезжают
-            // за край экрана: сдвиг не больше, чем позволяет их ширина, — аватар и текст остаются видны
-            .layout { measurable, constraints ->
-                val p = measurable.measure(constraints)
-                layout(p.width, p.height) {
-                    val room = ((constraints.maxWidth - p.width) / 2).coerceAtLeast(0)
-                    p.place(s.offsetX.dp.roundToPx().coerceIn(-room, room), 0)
-                }
-            }
-            .wrapContentSize(Alignment.TopCenter, unbounded = true)
-            .padding(ISLAND_PAD_DP.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        // Пустое место с другой стороны уравновешивает пузырь, чтобы остров стоял над камерой
-        val left = s.bubbleSide == BubbleSide.LEFT
-        if (left) BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds, left = true) else Spacer(Modifier.animatedWidth(slot))
-        IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, onBodyBounds, onBackdropShape, onBackdropSampler)
-        if (left) Spacer(Modifier.animatedWidth(slot)) else BubbleSlot(slot, bubbleVisible, bubbleAct, s, onBubbleBounds, left = false)
+    val compactWidth = remember { mutableIntStateOf(0) }
+    val left = s.bubbleSide == BubbleSide.LEFT
+    Layout(
+        modifier = Modifier.padding(vertical = ISLAND_PAD_DP.dp),
+        content = {
+            BubbleSlot(bubbleVisible, bubbleAct, s, onBubbleBounds, left)
+            IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, onBodyBounds,
+                onBackdropShape, onBackdropSampler, onCompactWidth = { compactWidth.intValue = it })
+        },
+    ) { children, constraints ->
+        val loose = Constraints(maxHeight = constraints.maxHeight)
+        val body = children[1].measure(loose)
+        val bubble = children[0].measure(loose)
+        val pad = ISLAND_PAD_DP.dp.roundToPx()
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else body.width + 2 * (bubble.width + pad)
+        layout(width, maxOf(body.height, bubble.height).coerceIn(constraints.minHeight, constraints.maxHeight)) {
+            // The bubble emerges from the compact capsule. The expanding card covers it in place.
+            val placement = islandPlacement(width, body.width, compactWidth.intValue, bubble.width,
+                slot.value.roundToPx(), pad, s.offsetX.dp.roundToPx(), left)
+            bubble.place(placement.bubbleX, 0)
+            body.place(placement.bodyX, 0)
+        }
     }
 }
 
-/** Ширина из анимации — читается при измерении, а не при сборке, поэтому кадр анимации не пересобирает остров. */
-private fun Modifier.animatedWidth(width: State<Dp>) = layout { measurable, constraints ->
-    val w = width.value.roundToPx().coerceAtLeast(0)
-    val p = measurable.measure(constraints.copy(minWidth = w, maxWidth = w))
-    layout(w, p.height) { p.place(0, 0) }
+internal data class IslandPlacement(val bodyX: Int, val bubbleX: Int)
+
+internal fun islandPlacement(width: Int, body: Int, compact: Int, bubble: Int, slot: Int, pad: Int,
+    offset: Int, left: Boolean): IslandPlacement {
+    val anchor = if (compact > 0) minOf(body, compact) else body
+    val extent = slot.coerceAtLeast(0)
+    val half = maxOf((body + 1) / 2, (anchor + 1) / 2 + extent)
+    val room = (width / 2 - half - pad).coerceAtLeast(0)
+    val center = width / 2 + offset.coerceIn(-room, room)
+    val bubbleX = if (left) center - anchor / 2 - extent else center + anchor / 2 + extent - bubble
+    return IslandPlacement(center - body / 2, bubbleX)
 }
 
-/**
- * Пузырь второй активности. Он лежит под островом и отделяется от него каплей: пока место под него растёт,
- * пузырь выходит из-под края острова и вырастает, при уходе — прячется обратно.
- * Отдельная функция: внутри Row подставился бы RowScope.AnimatedVisibility.
- */
 @Composable
-private fun BubbleSlot(slot: State<Dp>, visible: Boolean, act: Act?, s: IslandSettings, onBounds: (Rect) -> Unit, left: Boolean) {
+private fun BubbleSlot(visible: Boolean, act: Act?, s: IslandSettings, onBounds: (Rect) -> Unit, left: Boolean) {
     LaunchedEffect(visible) { if (!visible) onBounds(Rect.Zero) }
-    Box(
-        Modifier
-            .zIndex(-1f)
-            .layout { measurable, constraints ->
-                val w = slot.value.roundToPx().coerceAtLeast(0)
-                val p = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
-                // Справа пузырь прижат к дальнему краю места под него, слева — к ближнему краю экрана; пока место
-                // растёт, он выходит из-под острова
-                layout(w, p.height) { p.place(if (left) 0 else w - p.width, 0) }
-            },
-    ) {
+    Box {
         val drop = TransformOrigin(if (left) 1f else 0f, 0.5f)
         AnimatedVisibility(
             visible && act != null,
@@ -535,11 +525,12 @@ internal fun IslandBody(
     onBounds: (Rect) -> Unit,
     onBackdropShape: ((BackdropGeometry) -> Unit)? = null,
     onBackdropSampler: (((() -> Unit)?) -> Unit)? = null,
+    onCompactWidth: ((Int) -> Unit)? = null,
 ) {
     val preview = LocalIslandPreview.current
     val context = LocalContext.current
     val haptic = rememberHaptic()
-    val activities by rememberUpdatedState(LocalActivities.current)
+    val activities by rememberUpdatedState(LocalActivityIds.current)
     val scope = rememberCoroutineScope()
     val conf = LocalConfiguration.current
     // Раскрытый остров iPhone — 371 pt при ширине экрана 393 pt, то есть по 11 с каждой стороны;
@@ -621,8 +612,10 @@ internal fun IslandBody(
 
     // Короткая пилюля (режим звука) вздрагивает вбок, как остров на iPhone при переключении «Звонок/Бесшумно»
     val shake = remember { Animatable(0f) }
-    val pillId = (primary as? Act.NoticeA)?.n?.takeIf { it.style == NoticeStyle.PILL }?.id
-    LaunchedEffect(pillId) {
+    val banner = (primary as? Act.NoticeA)?.n
+    val pillId = banner?.takeIf { it.style == NoticeStyle.PILL && it.effect != NoticeEffect.RINGER }?.id
+    LaunchedEffect(pillId, s.reduceEffects, s.fxShake) {
+        shake.snapTo(0f)
         if (pillId == null || s.reduceEffects || !s.fxShake) return@LaunchedEffect
         for (x in floatArrayOf(-8f, 7f, -5f, 3.5f, -2f, 0f)) shake.animateTo(x, tween(60))
     }
@@ -676,11 +669,13 @@ internal fun IslandBody(
                 reportBackdrop()
                 drawContent()
             } else Modifier)
-            .then(if (glowAlpha > 0f) Modifier.drawBehind { islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) } else Modifier)
+            .drawBehind { if (glowAlpha > 0f) islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) }
             .then(
                 if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)
                 else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value }, sheen = { sheen.value }),
             )
+            .then(if (!calibrating && (primary is Act.ChargingA || banner?.effect == NoticeEffect.CHARGING))
+                chargingWave(s, banner?.id, expanded) else Modifier)
             .then(
                 if (egg && !calibrating) {
                     Modifier.drawWithContent {
@@ -767,9 +762,9 @@ internal fun IslandBody(
                                 Controls.hideIncomingCall()
                             }
                             !isExpanded && !vertical && abs(dx) > side && settings.swipeActivities && activities.size > 1 -> {
-                                val i = activities.indexOfFirst { it.id == act.id }.coerceAtLeast(0)
+                                val i = activities.indexOf(act.id).coerceAtLeast(0)
                                 val next = Math.floorMod(i + if (dx < 0) 1 else -1, activities.size)
-                                IslandBus.focus.value = activities[next].id
+                                IslandBus.focus.value = activities[next]
                             }
                             !isExpanded && !vertical && abs(dx) > side && act is Act.MediaA && settings.swipeTracks -> {
                                 haptic()
@@ -792,21 +787,27 @@ internal fun IslandBody(
     ) {
         // Смена содержимого: с «Жидким раскрытием» новое вырастает из прежнего вместе с формой острова,
         // без него — прежнее перетекание. Форма в обоих случаях меняется пружиной из «Раскрытия острова»
-        val widths = remember { HashMap<String, Int>() }
-        val frames = updateTransition(Frame(primary, expanded), label = "island")
+        val widths = remember { HashMap<Frame, Int>() }
+        // Only a change of activity or presentation starts a morph. Telemetry stays live in its slot.
+        val scene = Frame(primary.id, expanded, banner?.style)
+        val frames = updateTransition(scene, label = "island")
         frames.AnimatedContent(
             contentAlignment = Alignment.TopCenter,
-            contentKey = { it.key },
             transitionSpec = {
                 val change = if (s.liquidExpand) EnterTransition.None togetherWith ExitTransition.None else classicChange(s)
                 change.using(SizeTransform(clip = true) { _, _ -> islandSpec(s) })
             },
         ) { f ->
-            Box(if (s.liquidExpand) liquidFlow(f.key, frames, widths, s) else classicFlow(s)) {
+            val last = remember(f) { arrayOf(primary) }
+            val act = if (f == scene) primary else last[0]
+            if (f == scene) SideEffect { last[0] = primary }
+            val reportWidth = if (f == scene && !f.expanded && onCompactWidth != null)
+                Modifier.onSizeChanged { onCompactWidth(it.width) } else Modifier
+            Box(reportWidth.then(if (s.liquidExpand) liquidFlow(f, frames, widths, s) else classicFlow(s))) {
                 if (f.expanded) {
-                    ExpandedContent(f.act, s, lyrics, battery, expandedWidth)
+                    ExpandedContent(act, s, lyrics, battery, expandedWidth)
                 } else {
-                    CompactContent(f.act, s, expandedWidth)
+                    CompactContent(act, s, expandedWidth)
                 }
             }
         }
@@ -863,21 +864,22 @@ private fun AnimatedVisibilityScope.classicFlow(s: IslandSettings): Modifier {
  * поэтому содержимое не обгоняет форму и не отстаёт. [widths] — ширина каждого содержимого, запомненная при измерении.
  */
 @Composable
-private fun AnimatedVisibilityScope.liquidFlow(key: String, frames: Transition<Frame>, widths: HashMap<String, Int>, s: IslandSettings): Modifier {
+private fun AnimatedVisibilityScope.liquidFlow(key: Frame, frames: Transition<Frame>, widths: HashMap<Frame, Int>, s: IslandSettings): Modifier {
     val blurCache = remember { BlurEffectCache() }
     // «Другое» содержимое: для нового — прежнее, для уходящего — новое. Если на полпути направление
     // сменилось (раскрыли и тут же свернули), «другое» остаётся прежним — масштаб идёт дальше без скачка
-    val target = frames.targetState.key
-    val other = if (key == target) frames.currentState.key else target
-    val from = remember { arrayOfNulls<String>(1) }
+    val target = frames.targetState
+    val other = if (key == target) frames.currentState else target
+    val from = remember { arrayOfNulls<Frame>(1) }
     if (other != key) from[0] = other
+    val lastOtherWidth = remember { IntArray(1) }
     // 0 — содержимого ещё (или уже) нет, 1 — оно на месте; читается только при рисовании
     val presence = transition.animateFloat({ islandSpec(s) }, label = "presence") { if (it == EnterExitState.Visible) 1f else 0f }
     // Проявление и таяние — своя пружина, быстрее и без отскока: новое видно уже в начале хода
     val fade = transition.animateFloat({ fadeSpec(s) }, label = "fade") { if (it == EnterExitState.Visible) 1f else 0f }
     DisposableEffect(key) { onDispose { widths.remove(key) } }
     val zoom = !s.reduceEffects
-    val blurDp = if (s.reduceEffects || !s.fxBlur) 0f else 14f
+    val blurDp = if (s.reduceEffects || !s.fxBlur) 0f else 6f
     return Modifier.layout { measurable, constraints ->
         val content = measurable.measure(constraints)
         widths[key] = content.width
@@ -885,8 +887,9 @@ private fun AnimatedVisibilityScope.liquidFlow(key: String, frames: Transition<F
             content.placeWithLayer(0, 0) {
                 val p = presence.value
                 alpha = fade.value.coerceIn(0f, 1f)
-                val ow = from[0]?.let { widths[it] }
-                if (zoom && ow != null && content.width > 0) {
+                from[0]?.let { widths[it] }?.let { lastOtherWidth[0] = it }
+                val ow = lastOtherWidth[0]
+                if (zoom && ow > 0 && content.width > 0) {
                     val k = (ow.toFloat() / content.width).coerceIn(0.25f, 3f)
                     scaleX = k + (1f - k) * p
                     scaleY = scaleX
@@ -1050,7 +1053,7 @@ private fun BubbleContent(act: Act, s: IslandSettings) {
             }
             is Act.CallA -> Icon(Ios.call, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
             is Act.LiveA -> LiveGlyph(act.l, inner, liveTint(act.l.kind))
-            is Act.ChargingA -> Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
+            is Act.ChargingA -> Icon(Ios.flash, tr("Зарядка", "Charging"), tint = Tints.Green, modifier = Modifier.size(inner * 0.7f))
             is Act.WeatherA -> Icon(Icons.Rounded.WbSunny, null, tint = Tints.Yellow, modifier = Modifier.size(inner))
             is Act.HotspotA -> Icon(androidx.compose.material.icons.Icons.Rounded.WifiTethering,
                 tr("Точка доступа", "Hotspot"), tint = Tints.Blue, modifier = Modifier.size(inner))
@@ -1130,7 +1133,7 @@ fun expandedWidth(screen: Dp, s: IslandSettings): Dp {
 }
 
 
-private val LocalActivities = staticCompositionLocalOf<List<Act>> { emptyList() }
+private val LocalActivityIds = staticCompositionLocalOf<List<String>> { emptyList() }
 
 /** Stable aggregate: notification update times must not switch between downloads every second. */
 internal fun groupedProgress(items: List<com.akira.island.core.ProgressInfo>): com.akira.island.core.ProgressInfo? {
