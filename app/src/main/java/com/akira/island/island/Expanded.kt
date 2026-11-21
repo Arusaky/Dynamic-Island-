@@ -293,7 +293,7 @@ private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, batt
         }
 
         MediaTimeline(m, s, lyrics)
-        MediaControls(m.like, m.dislike, m.playing)
+        MediaControls(m.pkg, m.like, m.dislike, m.playing)
     }
 }
 
@@ -347,7 +347,7 @@ private fun MediaSeek(m: MediaInfo, clock: State<Long>) {
  * а кнопки при этом не перерисовываются.
  */
 @Composable
-private fun MediaControls(like: PlayerAction?, dislike: PlayerAction?, playing: Boolean) {
+private fun MediaControls(pkg: String, like: PlayerAction?, dislike: PlayerAction?, playing: Boolean) {
     val context = LocalContext.current
     val ratings: @Composable () -> Unit = {
         like?.let { a ->
@@ -365,9 +365,9 @@ private fun MediaControls(like: PlayerAction?, dislike: PlayerAction?, playing: 
         val narrow = maxWidth < 260.dp
         val transport: @Composable () -> Unit = {
             Row(horizontalArrangement = Arrangement.spacedBy(if (narrow) 8.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                RoundButton(Ios.back, size = if (narrow) 36.dp else 44.dp, bg = Color.Transparent, iconScale = 0.636f) { Controls.prev() }
-                RoundButton(if (playing) Ios.pause else Ios.play, size = if (narrow) 44.dp else 48.dp, bg = Color.Transparent, iconScale = 0.667f) { Controls.playPause() }
-                RoundButton(Ios.forward, size = if (narrow) 36.dp else 44.dp, bg = Color.Transparent, iconScale = 0.636f) { Controls.next() }
+                RoundButton(Ios.back, size = if (narrow) 36.dp else 44.dp, bg = Color.Transparent, iconScale = 0.636f) { Controls.prev(pkg) }
+                RoundButton(if (playing) Ios.pause else Ios.play, size = if (narrow) 44.dp else 48.dp, bg = Color.Transparent, iconScale = 0.667f) { Controls.playPause(pkg) }
+                RoundButton(Ios.forward, size = if (narrow) 36.dp else 44.dp, bg = Color.Transparent, iconScale = 0.636f) { Controls.next(pkg) }
             }
         }
         if (narrow) Column(Modifier.fillMaxWidth()) {
@@ -859,7 +859,8 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
     val date = SimpleDateFormat(pattern, Lang.locale).format(Date(now))
         .replaceFirstChar { it.titlecase(Lang.locale) }
     val alarm by IslandBus.nextAlarm.collectAsState()
-    Column {
+    val scroll = rememberScrollState()
+    Column(Modifier.verticalScroll(scroll, enabled = scroll.maxValue > 0).testTag("expanded-idle")) {
         if (extras.briefEnabled) {
             BriefPanel(s, extras, battery, now, time, date, alarm)
         } else Row(verticalAlignment = Alignment.CenterVertically) {

@@ -15,10 +15,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.akira.island.core.Controls
+import com.akira.island.core.IslandBus
 import com.akira.island.core.tr
 import com.akira.island.data.BriefClockStyle
 import com.akira.island.data.ContactShortcut
 import com.akira.island.data.ExtrasRepo
+import com.akira.island.data.SettingsRepo
+import com.akira.island.island.Act
 import com.akira.island.service.WeatherCity
 import com.akira.island.service.WeatherRepo
 import com.akira.island.ui.*
@@ -31,15 +35,21 @@ import kotlinx.coroutines.withContext
 fun ExtrasScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val s by ExtrasRepo.state.collectAsState()
+    val island by SettingsRepo.state.collectAsState()
+    val serviceRunning by IslandBus.serviceRunning.collectAsState()
     val scope = rememberCoroutineScope()
     var apps by remember { mutableStateOf<List<ResolveInfo>?>(null) }
     var query by remember { mutableStateOf("") }
     var cities by remember { mutableStateOf<List<WeatherCity>>(emptyList()) }
+    var cityError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var stepError by remember { mutableStateOf<String?>(null) }
     var clockStyle by remember { mutableStateOf(false) }
     val stepPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         ExtrasRepo.update { copy(steps = granted) }
+        if (!granted) stepError = tr("Разрешите доступ к физической активности для подсчёта шагов.",
+            "Allow physical activity access to count steps.")
     }
     val contact = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
         if (uri != null && uri.scheme == "content" && uri.authority == "com.android.contacts") {
@@ -52,12 +62,22 @@ fun ExtrasScreen(onBack: () -> Unit) {
         }
     }
     Page(tr("Дополнительная панель", "Extra controls"), onBack) {
+        if (serviceRunning && island.enabled) {
+            TextButton(onClick = { Controls.expand(Act.Idle.id) }) {
+                Text(tr("Открыть на острове", "Open on the island"))
+            }
+        } else {
+            SettingsHint(tr("Включите остров на Главной, чтобы открыть панель.", "Enable the island on Home to open the panel."))
+        }
         GroupToggle(Pos.Single, Icons.Rounded.Dashboard, tr("Сводка", "Brief"),
-            tr("Часы, шаги и погода на трёх страницах раскрытого пустого острова", "Clock, steps and weather on three pages of the expanded idle island"),
+            tr("Часы, шаги и погода в раскрытом пустом острове", "Clock, steps and weather in the expanded idle island"),
             s.briefEnabled, color = Tile.Purple) { ExtrasRepo.update { copy(briefEnabled = it) } }
         if (s.briefEnabled) {
             GroupItem(Pos.Single, Icons.Rounded.Schedule, tr("Стиль часов", "Clock style"), s.briefClockStyle.title,
                 color = Tile.Purple, onClick = { clockStyle = true })
+            GroupToggle(Pos.Single, Icons.Rounded.DirectionsWalk, tr("Страница шагомера", "Step counter page"),
+                tr("Показывать страницу шагомера в сводке", "Show the step counter page in Brief"),
+                s.briefShowSteps, color = Tile.Green) { ExtrasRepo.update { copy(briefShowSteps = it) } }
             SettingsHint(tr("Сводка использует включённый шагомер и погоду выбранного города. Ярлыки и управление остаются ниже. Шаги, погода и ярлыки скрыты до разблокировки.",
                 "Brief uses your enabled step counter and selected city's weather. Shortcuts and controls stay below. Steps, weather and shortcuts are hidden until unlocked."))
         }
@@ -69,11 +89,13 @@ fun ExtrasScreen(onBack: () -> Unit) {
             tr("Циферблат в раскрытом пустом острове", "Clock face in the expanded idle island"), s.analogClock, color = Tile.Purple) { ExtrasRepo.update { copy(analogClock = it) } }
         GroupToggle(Pos.Single, Icons.Rounded.DirectionsWalk, tr("Шагомер", "Step counter"),
             tr("Шаги за день с момента включения; нужен датчик шагов", "Daily steps since enabling; requires a step sensor"), s.steps, color = Tile.Green) { enabled ->
+            stepError = null
             val sensor = context.getSystemService(android.hardware.SensorManager::class.java)?.getDefaultSensor(android.hardware.Sensor.TYPE_STEP_COUNTER)
-            if (enabled && sensor == null) error = tr("На устройстве нет датчика шагов", "This device has no step sensor")
+            if (enabled && sensor == null) stepError = tr("На устройстве нет датчика шагов", "This device has no step sensor")
             else if (enabled && android.os.Build.VERSION.SDK_INT >= 29) stepPermission.launch(android.Manifest.permission.ACTIVITY_RECOGNITION)
             else ExtrasRepo.update { copy(steps = enabled) }
         }
+        stepError?.let { SettingsHint(it) }
         SectionHeader(tr("Быстрый доступ", "Shortcuts"))
         Group {
             GroupItem(Pos.First, Icons.Rounded.Apps, tr("Добавить приложение", "Add app"), tr("До шести приложений", "Up to six apps"), color = Tile.Purple, onClick = {
@@ -117,19 +139,35 @@ fun ExtrasScreen(onBack: () -> Unit) {
                 Text(tr("Обновить погоду", "Refresh weather"))
             }
         }
-        OutlinedTextField(query, { query = it.take(100) }, label = { Text(tr("Город", "City")) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+        OutlinedTextField(query, {
+            query = it.take(100)
+            cities = emptyList()
+            cityError = null
+        }, label = { Text(tr("Город", "City")) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
         TextButton(enabled = !busy && query.trim().length >= 2, onClick = {
+            val requested = query.trim()
+            busy = true
+            cityError = null
+            cities = emptyList()
             scope.launch {
-                busy = true; error = null
                 try {
-                    cities = WeatherRepo.cities(query)
-                    if (cities.isEmpty()) error = tr("Город не найден", "City not found")
-                } catch (e: CancellationException) { throw e }
-                catch (_: Exception) { error = tr("Не удалось найти город. Проверьте подключение.", "City search failed. Check your connection.") }
-                finally { busy = false }
+                    val results = WeatherRepo.cities(requested)
+                    if (query.trim() == requested) {
+                        cities = results
+                        if (results.isEmpty()) cityError = tr("Город не найден", "City not found")
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    if (query.trim() == requested)
+                        cityError = tr("Не удалось найти город. Проверьте подключение.", "City search failed. Check your connection.")
+                } finally {
+                    busy = false
+                }
             }
         }) { Text(if (busy) tr("Поиск…", "Searching…") else tr("Найти город", "Find city")) }
         error?.let { Text(it, color = Ui.Sub) }
+        cityError?.let { Text(it, color = Ui.Sub) }
         cities.forEach { city ->
             TextButton(onClick = {
                 ExtrasRepo.update { copy(weatherCity = city.name, latitude = city.latitude, longitude = city.longitude, weatherEnabled = true) }
@@ -142,15 +180,41 @@ fun ExtrasScreen(onBack: () -> Unit) {
     if (clockStyle) ChoiceDialog(tr("Стиль часов", "Clock style"), BriefClockStyle.entries.toList(), s.briefClockStyle,
         { it.title }, { style -> ExtrasRepo.update { copy(briefClockStyle = style) } }, { clockStyle = false })
     apps?.let { available ->
-        AlertDialog(onDismissRequest = { apps = null }, title = { Text(tr("Выберите приложение", "Choose app")) }, text = {
-            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                available.forEach { app ->
-                    Text(app.loadLabel(context.packageManager).toString(), modifier = Modifier.fillMaxWidth().clickable {
-                        ExtrasRepo.update { copy(apps = (this.apps + app.activityInfo.packageName).distinct().takeLast(6)) }
-                        apps = null
-                    }.padding(12.dp))
+        val labels = remember(available) {
+            available.associate { it.activityInfo.packageName to it.loadLabel(context.packageManager).toString() }
+        }
+        var appSearch by remember { mutableStateOf("") }
+        var selected by remember { mutableStateOf(s.apps.toSet()) }
+        AlertDialog(
+            onDismissRequest = { apps = null },
+            title = { Text(tr("Выберите до шести приложений", "Choose up to six apps")) },
+            text = {
+                Column {
+                    OutlinedTextField(appSearch, { appSearch = it }, label = { Text(tr("Поиск приложений", "Search apps")) },
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
+                    val matches = labels.filter { (pkg, label) ->
+                        label.contains(appSearch.trim(), ignoreCase = true) || pkg.contains(appSearch.trim(), ignoreCase = true)
+                    }
+                    if (matches.isEmpty()) Text(tr("Приложения не найдены", "No matching apps"))
+                    Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                        matches.forEach { (pkg, label) ->
+                            val checked = pkg in selected
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Checkbox(checked, onCheckedChange = { on -> selected = if (on) selected + pkg else selected - pkg },
+                                    enabled = checked || selected.size < 6)
+                                Text(label)
+                            }
+                        }
+                    }
                 }
-            }
-        }, confirmButton = { TextButton(onClick = { apps = null }) { Text(tr("Закрыть", "Close")) } })
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    ExtrasRepo.update { copy(apps = selected.toList()) }
+                    apps = null
+                }) { Text(tr("Готово", "Done") + " (${selected.size}/6)") }
+            },
+            dismissButton = { TextButton(onClick = { apps = null }) { Text(tr("Отмена", "Cancel")) } },
+        )
     }
 }

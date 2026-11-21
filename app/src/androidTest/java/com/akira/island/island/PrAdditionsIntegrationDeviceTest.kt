@@ -105,6 +105,33 @@ class PrAdditionsIntegrationDeviceTest {
         }
     }
 
+    @Test fun extraControlsCanBeEnabledOpenedAndScrolledInAShortCard() {
+        val wasRunning = IslandBus.serviceRunning.value
+        try {
+            compose.runOnUiThread {
+                IslandBus.serviceRunning.value = true
+                SettingsRepo.update { copy(expandedMaxHeight = 220) }
+                compose.activity.setContent { IslandTheme {
+                    com.akira.island.ui.screens.ExtrasScreen {}
+                } }
+            }
+            compose.onNodeWithText("Brief", substring = false).performClick()
+            compose.onNodeWithText("Controls", substring = false).performClick()
+            compose.onNodeWithText("Open on the island").performClick()
+            compose.runOnIdle {
+                assertTrue(ExtrasRepo.state.value.briefEnabled && ExtrasRepo.state.value.controls)
+                assertTrue(IslandBus.expanded.value)
+                assertEquals(Act.Idle.id, IslandBus.focus.value)
+            }
+            idle()
+            compose.onNodeWithTag("brief-panel").assertIsDisplayed()
+            compose.onNodeWithText("Media volume").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("Call history").performScrollTo().assertIsDisplayed()
+        } finally {
+            compose.runOnUiThread { IslandBus.serviceRunning.value = wasRunning }
+        }
+    }
+
     @Test fun expandedPlayerKeepsBatteryIconAndTransportWithCapsulePercentOnly() {
         val media = MediaInfo("test", "example.player", "Track", "Artist", null, null, Color.Yellow,
             180_000, 42_000, android.os.SystemClock.elapsedRealtime(), 0f, false, true)

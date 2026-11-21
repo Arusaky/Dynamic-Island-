@@ -235,7 +235,10 @@ data class PayReady(val pkg: String, val icon: ImageBitmap?)
  * Ближайший будильник (AlarmManager.getNextAlarmClock): когда прозвенит, какое приложение его поставило
  * и что открыть нажатием — обычно экран будильников «Часов».
  */
-data class AlarmInfo(val triggerAt: Long, val pkg: String?, val show: PendingIntent?)
+data class AlarmInfo(val triggerAt: Long, val pkg: String?, val show: PendingIntent?) {
+    fun withDisplayOffset(minutes: Int): AlarmInfo =
+        if (minutes == 0) this else copy(triggerAt = triggerAt + minutes.coerceIn(-120, 120) * 60_000L)
+}
 
 /**
  * Кнопка из уведомления: «Ответить», «Пометить прочитанным» и т. п.

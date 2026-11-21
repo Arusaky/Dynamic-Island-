@@ -25,6 +25,8 @@ object FaceUnlockState {
     val phase = MutableStateFlow(FacePhase.HIDDEN)
     val availability = MutableStateFlow(FaceAvailability.OFF)
     internal val revision = MutableStateFlow(0L)
+    internal val reconnectRequest = MutableStateFlow(0L)
+    fun reconnect() { reconnectRequest.update { it + 1 }; refresh() }
     fun refresh() { revision.update { it + 1 } }
     fun access(): FaceAvailability = runCatching {
         when {
@@ -50,6 +52,7 @@ class FaceUnlockController(private val context: Context, parent: CoroutineScope)
     private var bindingTimeout: Job? = null
     private var generation = 0L
     private var started = false
+    private var lastReconnect = FaceUnlockState.reconnectRequest.value
     private val args = Shizuku.UserServiceArgs(ComponentName(context, FaceSourceService::class.java))
         .tag("island-face-events-v1").version(1).daemon(false).debuggable(false).processNameSuffix("face_events")
     private val binderReceived = Shizuku.OnBinderReceivedListener { FaceUnlockState.refresh() }
@@ -86,8 +89,12 @@ class FaceUnlockController(private val context: Context, parent: CoroutineScope)
         beginLock()
         scope.launch {
             combine(SettingsRepo.state.map { it.faceUnlockOnly && it.enabled }.distinctUntilChanged(),
-                IslandBus.screenOn, FaceUnlockState.revision) { enabled, _, _ -> enabled }
-                .collect { enabled ->
+                IslandBus.screenOn, FaceUnlockState.revision, FaceUnlockState.reconnectRequest) { enabled, _, _, retry -> enabled to retry }
+                .collect { (enabled, retry) ->
+                    if (retry != lastReconnect) {
+                        lastReconnect = retry
+                        disconnect()
+                    }
                     beginLock()
                     val status = when {
                         !enabled -> FaceAvailability.OFF
@@ -127,15 +134,17 @@ class FaceUnlockController(private val context: Context, parent: CoroutineScope)
             override fun onSourceState(state: Int) {
                 scope.launch {
                     if (token != generation) return@launch
-                    if (state == 1) FaceUnlockState.availability.value = FaceAvailability.WAITING_FOR_EVENTS
-                    else failSource()
+                    if (state == 1) {
+                        bindingTimeout?.cancel()
+                        if (FaceUnlockState.availability.value != FaceAvailability.EVENTS_SEEN)
+                            FaceUnlockState.availability.value = FaceAvailability.WAITING_FOR_EVENTS
+                    } else failSource()
                 }
             }
         }
         val conn = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName, binder: IBinder) {
                 if (token != generation) return
-                bindingTimeout?.cancel()
                 runCatching {
                     binder.linkToDeath({ scope.launch { if (token == generation) failSource() } }, 0)
                     // Package visibility can hide this optional source. The independently trusted
@@ -155,7 +164,7 @@ class FaceUnlockController(private val context: Context, parent: CoroutineScope)
         runCatching { Shizuku.bindUserService(args, conn) }.onFailure { failSource() }
         if (token == generation && connection != null) bindingTimeout = scope.launch {
             delay(10_000)
-            if (token == generation && source == null) failSource()
+            if (token == generation && FaceUnlockState.availability.value == FaceAvailability.CONNECTING) failSource()
         }
     }
 

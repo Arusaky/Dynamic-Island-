@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import android.media.session.MediaController
 import android.media.session.PlaybackState
 import android.os.SystemClock
+import android.view.KeyEvent
 
 /** Команды, которые капсула отдаёт системе: плеер, таймер, фонарик, громкость. */
 object Controls {
@@ -45,18 +46,36 @@ object Controls {
         mediaController?.transportControls?.sendCustomAction(action, null)
     }
 
-    fun playPause() {
-        val c = mediaController ?: return
-        if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause()
-        else c.transportControls.play()
+    fun playPause(pkg: String? = null) {
+        val controller = mediaController?.takeIf { pkg == null || it.packageName == pkg } ?: return
+        runCatching {
+            val state = controller.playbackState?.state
+            val pause = state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
+            val action = if (pause) PlaybackState.ACTION_PAUSE else PlaybackState.ACTION_PLAY
+            val key = if (pause) KeyEvent.KEYCODE_MEDIA_PAUSE else KeyEvent.KEYCODE_MEDIA_PLAY
+            controller.transportOrKey(action, key) { if (pause) pause() else play() }
+        }
     }
 
-    fun next() {
-        mediaController?.transportControls?.skipToNext()
+    fun next(pkg: String? = null) = track(pkg, PlaybackState.ACTION_SKIP_TO_NEXT, KeyEvent.KEYCODE_MEDIA_NEXT) { skipToNext() }
+
+    fun prev(pkg: String? = null) = track(pkg, PlaybackState.ACTION_SKIP_TO_PREVIOUS, KeyEvent.KEYCODE_MEDIA_PREVIOUS) { skipToPrevious() }
+
+    private fun track(pkg: String?, action: Long, key: Int, command: MediaController.TransportControls.() -> Unit) {
+        val controller = mediaController?.takeIf { pkg == null || it.packageName == pkg } ?: return
+        runCatching { controller.transportOrKey(action, key, command) }
     }
 
-    fun prev() {
-        mediaController?.transportControls?.skipToPrevious()
+    private fun MediaController.transportOrKey(action: Long, key: Int, command: MediaController.TransportControls.() -> Unit) {
+        val actions = playbackState?.actions ?: 0L
+        if (actions and action != 0L) {
+            transportControls.command()
+        } else if (dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))) {
+            dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_UP, key))
+        } else {
+            // Some players implement transport commands without advertising action flags.
+            transportControls.command()
+        }
     }
 
     fun seekTo(ms: Long) {

@@ -43,6 +43,7 @@ Notifications with reply · navigation · payments · music with lyrics · calls
 - 📶 **Hotspot**: persistent state, a settings shortcut and client counts when reliable system information is available.
 - ⬇️ **Transfer speed in expanded download cards**: app-provided details or optional approximate total network rates ↓/↑, preserving actual download percentages.
 - 🔓 **Face ID · face only**: optional verified face-unlock animation using separately configured Shizuku. PIN and fingerprint unlock are not presented as Face ID.
+  Check the status under **Events → Face recognition**. “Off” means the switch is off. If Shizuku needs starting or granting permission, do that first. When it says it is waiting for face events, lock your phone and unlock it with your face. An unchanged status may mean the firmware does not expose the required events. If the event source fails, tap “Check” to reconnect. For the general unlock animation, enable “Device unlock” and switch off face-only mode.
 - ⏰ **Create alarms**, auto-hide the idle island, scroll to top in supported apps and keep cards open on outside touch.
 - 🔋 **Battery**: an icon filled according to the current charge and optional approximate charging-time estimates.
 - 🔔 **Notifications**: history, display styles, duration, silent messages, per-app rules and missing-notification diagnostics.

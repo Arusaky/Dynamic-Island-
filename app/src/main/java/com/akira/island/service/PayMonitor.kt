@@ -150,9 +150,6 @@ object PayMonitor {
         }
     }
 
-    /** Окно «Оплата» из сервисов Google — телефон поднесли к терминалу. */
-    fun onTapAndPay(context: Context) = onPayScreen(context, GMS)
-
     /** Открыли приложение оплаты. С «Подсказкой при открытии» — сразу, как раньше; без неё ждём экран оплаты. */
     fun onAppOpened(context: Context, pkg: String) {
         if (SettingsRepo.current.payHintOnOpen && isPayApp(context, pkg)) onPayScreen(context, pkg, confirmed = false)

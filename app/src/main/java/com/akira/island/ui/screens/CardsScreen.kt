@@ -100,7 +100,8 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
 
         if (s.cardProgress) {
             GroupToggle(Pos.Single, Icons.Rounded.Downloading, tr("Общая скорость сети", "Total network speed"),
-                tr("Примерные ↓ и ↑ во время загрузки; это не скорость отдельного файла", "Approximate download and upload totals during a transfer, not the speed of one file"),
+                tr("Откройте карточку активной загрузки, чтобы увидеть общую скорость ↓ и ↑",
+                    "Expand an active download card to see total download and upload speeds"),
                 s.showNetworkRate, color = Tile.Teal) { set { copy(showNetworkRate = it) } }
             if (s.showNetworkRate) com.akira.island.island.NetworkRateExample()
         }

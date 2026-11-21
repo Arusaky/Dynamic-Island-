@@ -165,6 +165,20 @@ class BriefPanelDeviceTest {
         compose.onNodeWithTag("brief-step-count").assertIsDisplayed()
     }
 
+    @Test fun hidingStepPageLeavesWeatherReachableWithoutTurningOffStepTracking() {
+        content()
+        compose.onNodeWithTag("brief-next").performClick()
+        compose.onNodeWithTag("brief-step-count").assertIsDisplayed()
+        compose.runOnIdle { ExtrasRepo.update { copy(briefShowSteps = false) } }
+        compose.onNodeWithTag("brief-next").assertIsNotEnabled()
+        compose.onNodeWithTag("brief-step-count").assertDoesNotExist()
+        compose.onNodeWithTag("brief-weather-city").assertTextEquals("Private test city")
+        compose.runOnIdle {
+            assertTrue(ExtrasRepo.state.value.steps)
+            assertTrue(ExtrasRepo.state.value.weatherEnabled)
+        }
+    }
+
     @Test fun optingOutRestoresTheExistingHeaderAndSingleStepsRow() {
         compose.runOnUiThread { ExtrasRepo.update { copy(briefEnabled = false) } }
         content()

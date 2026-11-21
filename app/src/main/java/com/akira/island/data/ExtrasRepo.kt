@@ -32,8 +32,12 @@ data class ExtraSettings(
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
     val briefEnabled: Boolean = false,
+    val briefShowSteps: Boolean = true,
     val briefClockStyle: BriefClockStyle = BriefClockStyle.DIGITAL,
-)
+) {
+    val hasIdleExtras: Boolean
+        get() = briefEnabled || controls || analogClock || steps || apps.isNotEmpty() || contacts.isNotEmpty()
+}
 
 /** Optional panel preferences are separate from the island layout migration. */
 object ExtrasRepo {

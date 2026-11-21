@@ -51,8 +51,15 @@ fun FaceSettings(enabled: Boolean, onEnabled: (Boolean) -> Unit) {
         access == FaceAvailability.BACKEND_UNSUPPORTED -> tr("Нужен Shizuku 13+ в режиме ADB, без root", "Requires Shizuku 13+ with the ADB backend")
         runtime == FaceAvailability.PAUSED -> tr("Приостановлено: экран выключен", "Paused while the screen is off")
         runtime == FaceAvailability.EVENTS_SEEN -> tr("События лица обнаружены. Проверьте вход лицом, PIN и отпечатком", "Face events detected. Test face, PIN and fingerprint unlock")
-        runtime == FaceAvailability.SOURCE_UNAVAILABLE -> tr("Источник событий недоступен на этой прошивке или отключён", "Event source unavailable on this firmware or disconnected")
-        else -> tr("Ожидаем системные события лица; совместимость ещё не подтверждена", "Waiting for face events; compatibility is not yet confirmed")
+        runtime == FaceAvailability.SOURCE_UNAVAILABLE -> tr(
+            "Источник событий не ответил. Нажмите «Проверить» для переподключения.",
+            "The event source did not respond. Tap Check to reconnect.",
+        )
+        runtime == FaceAvailability.CONNECTING -> tr("Подключаемся к источнику событий", "Connecting to the event source")
+        else -> tr(
+            "Ожидаем события лица. Заблокируйте телефон и разблокируйте его лицом. Если статус не изменится, прошивка может не передавать нужные события.",
+            "Waiting for face events. Lock the phone and unlock with your face. If the status stays the same, the firmware may not expose the required events.",
+        )
     }
     SectionHeader(tr("Распознавание лица", "Face recognition"))
     GroupToggle(Pos.Single,Icons.Rounded.Face,tr("Face ID · только лицо", "Face ID · face only"),
@@ -61,12 +68,16 @@ fun FaceSettings(enabled: Boolean, onEnabled: (Boolean) -> Unit) {
     if (enabled) {
         SettingsHint(tr("Shizuku подключается отдельно и обычно требует запуска после перезагрузки. При неизвестном способе входа эффект не показывается. Общая плашка «Разблокировка устройства» при этом режиме не используется.",
             "Set up Shizuku separately; it usually needs restarting after a reboot. Unknown unlock methods show no effect. The general Device unlock banner is suppressed in this mode."))
+        SettingsHint(tr(
+            "Для обычной анимации включите «Разблокировка устройства» и выключите режим «только лицо».",
+            "For the general animation, enable Device unlock and switch off face-only mode.",
+        ))
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
             TextButton(onClick={
                 requestFailed=false
                 if (access == FaceAvailability.PERMISSION_NEEDED) {
                     runCatching { Shizuku.requestPermission(7461) }.onFailure { requestFailed=true }
-                } else FaceUnlockState.refresh()
+                } else FaceUnlockState.reconnect()
             }) { Text(if(access == FaceAvailability.PERMISSION_NEEDED) tr("Дать доступ", "Allow access") else tr("Проверить", "Check")) }
             TextButton(onClick={ runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://shizuku.rikka.app/guide/setup/"))) } }) {
                 Text(tr("Как подключить", "Setup guide"))

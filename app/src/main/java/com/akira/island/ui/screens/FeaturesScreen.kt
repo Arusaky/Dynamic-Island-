@@ -330,6 +330,7 @@ else trf("Через {0} с; нажатие у камеры возвращает
 private fun languageTitle(): String = when (Lang.code) {
     "en" -> "Language"
     "ru" -> "Язык · Language"
+    "uk" -> "Мова · Language"
     "id" -> "Bahasa · Language"
     "pt" -> "Idioma · Language"
     "kk" -> "Тіл · Language"

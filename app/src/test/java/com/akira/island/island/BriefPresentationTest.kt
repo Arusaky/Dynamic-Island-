@@ -30,6 +30,16 @@ class BriefPresentationTest {
         assertFalse(restored.steps); assertFalse(restored.weatherEnabled); assertFalse(restored.controls)
     }
 
+    @Test fun stepPageCanBeHiddenIndependentlyOfWeatherAndStepTracking() {
+        assertEquals(listOf(BriefPage.CLOCK, BriefPage.STEPS, BriefPage.WEATHER), briefPages(extras))
+        val updated = extras.copy(briefShowSteps = false)
+        val restored = Json.decodeFromString<ExtraSettings>(Json.encodeToString(ExtraSettings.serializer(), updated))
+        assertEquals(listOf(BriefPage.CLOCK, BriefPage.WEATHER), briefPages(restored))
+        assertTrue(restored.steps)
+        assertTrue(restored.weatherEnabled)
+        assertEquals(BriefDataStatus.READY, briefDetails(restored, false, 12, weather, now).weatherStatus)
+    }
+
     @Test fun lockRemovesValuesBeforeRenderingIncludingASelectedCity() {
         val hidden = briefDetails(extras, locked = true, steps = 2_345, weather, now)
         assertEquals(BriefDataStatus.HIDDEN, hidden.stepsStatus)

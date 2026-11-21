@@ -3,8 +3,12 @@ package com.akira.island.island
 import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
+import android.provider.CallLog
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -31,10 +35,9 @@ fun IdleExtras(s: IslandSettings) {
     val steps by com.akira.island.service.StepRepo.count.collectAsState()
     val standaloneInfo = !extras.briefEnabled && (extras.steps || extras.analogClock)
     if (!extras.controls && !standaloneInfo) return
-    fun open(intent: Intent) {
-        Controls.collapse()
+    fun open(intent: Intent): Boolean =
         runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    }
+            .onSuccess { Controls.collapse() }.isSuccess
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
         if (extras.analogClock && !extras.briefEnabled) AnalogClock(rememberWallNow(1000), Modifier.fillMaxWidth().height(110.dp))
         if (extras.steps && !locked && !extras.briefEnabled) Text(tr("Шаги сегодня", "Steps today") + ": " + (steps?.toString() ?: "…"), color = Color.White, fontSize = 14.sp)
@@ -52,7 +55,9 @@ fun IdleExtras(s: IslandSettings) {
             Text(tr("Громкость мультимедиа", "Media volume"), color = Color.White, fontSize = 13.sp)
             Slider(volume.coerceIn(0f, maximum.toFloat()), onValueChange = { v ->
                 changingVolume = true
-                if (runCatching { audio?.setStreamVolume(AudioManager.STREAM_MUSIC, v.toInt(), 0) }.isSuccess) volume = v
+                if (audio != null && runCatching {
+                    audio.setStreamVolume(AudioManager.STREAM_MUSIC, v.toInt(), 0)
+                }.isSuccess) volume = v
             }, onValueChangeFinished = { changingVolume = false }, valueRange = 0f..maximum.toFloat())
             var brightness by remember { mutableFloatStateOf(runCatching { Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS) }.getOrDefault(128).toFloat()) }
             if (Settings.System.canWrite(context)) {
@@ -68,7 +73,13 @@ fun IdleExtras(s: IslandSettings) {
                 Text(tr("Разрешить управление яркостью", "Allow brightness controls"))
             }
             Row {
-                TextButton(onClick = { open(Intent(Intent.ACTION_VIEW, android.provider.CallLog.Calls.CONTENT_URI)) }) { Text(tr("Журнал звонков", "Call history")) }
+                TextButton(onClick = {
+                    if (!open(Intent(Intent.ACTION_VIEW).setType(CallLog.Calls.CONTENT_TYPE)) &&
+                        !open(Intent(Intent.ACTION_VIEW, CallLog.Calls.CONTENT_URI))) {
+                        Toast.makeText(context, tr("Не удалось открыть журнал звонков", "Could not open call history"),
+                            Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text(tr("Журнал звонков", "Call history")) }
                 TextButton(onClick = { open(Intent(context, com.akira.island.ui.MainActivity::class.java)) }) { Text(tr("Настройки", "Settings")) }
             }
         }
@@ -77,12 +88,21 @@ fun IdleExtras(s: IslandSettings) {
 
 @Composable
 fun WeatherDetails(weather: WeatherInfo) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val extras by ExtrasRepo.state.collectAsState()
+    val locked by IslandBus.locked.collectAsState()
+    val preview = LocalIslandPreview.current
+    val scroll = rememberScrollState()
+    Column(Modifier.verticalScroll(scroll, enabled = scroll.maxValue > 0), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(weather.city, color = Color.White, fontSize = 18.sp)
         Text(String.format(Locale.ROOT, "%.0f°C", weather.temperature), color = Color.White, fontSize = 36.sp, style = Digits)
         Text(weather.summary(), color = Color.White, fontSize = 16.sp)
         Text(tr("Обновлено", "Updated") + " " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(weather.updatedAt)), color = Color.Gray, fontSize = 12.sp)
         Text("Open-Meteo · CC BY 4.0", color = Color.Gray, fontSize = 12.sp)
+        if (!locked && !preview && extras.hasIdleExtras) {
+            TextButton(onClick = { Controls.expand(Act.Idle.id) }) {
+                Text(tr("Дополнительная панель", "Extra controls"))
+            }
+        }
     }
 }
 

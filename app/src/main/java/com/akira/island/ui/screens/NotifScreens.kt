@@ -1,12 +1,16 @@
 package com.akira.island.ui.screens
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -14,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +50,10 @@ fun NotifAppsScreen(onBack: () -> Unit) {
     val apps by NotifApps.apps.collectAsState()
     val s by SettingsRepo.state.collectAsState()
     var pick by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var selecting by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf(setOf<String>()) }
+    var bulkRule by remember { mutableStateOf(false) }
 
     Page(tr("Приложения", "Apps"), onBack) {
         Text(
@@ -52,16 +61,36 @@ fun NotifAppsScreen(onBack: () -> Unit) {
                 "Apps that have sent notifications show up here. Always — also show silent ones, Never — don't show them in the island."),
             color = Ui.Sub, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 8.dp),
         )
-        val list = apps.entries.sortedBy { it.value.lowercase() }
+        if (apps.isNotEmpty()) {
+            OutlinedTextField(query, { query = it }, label = { Text(tr("Поиск приложений", "Search apps")) },
+                singleLine = true, modifier = Modifier.fillMaxWidth())
+            TextButton(onClick = { selecting = !selecting; selected = emptySet() }) {
+                Text(if (selecting) tr("Отменить выбор", "Cancel selection") else tr("Выбрать несколько", "Select multiple"))
+            }
+            if (selecting) TextButton(enabled = selected.isNotEmpty(), onClick = { bulkRule = true }) {
+                Text(tr("Правило для выбранных", "Set rule for selected") + " (${selected.size})")
+            }
+        }
+        val list = apps.entries.filter { (pkg, label) ->
+            label.contains(query.trim(), ignoreCase = true) || pkg.contains(query.trim(), ignoreCase = true)
+        }.sortedBy { it.value.lowercase() }
         if (list.isEmpty()) {
-            Text(tr("Пока пусто: уведомлений приложений ещё не приходило.", "Empty for now: no app notifications have arrived yet."),
+            Text(if (apps.isEmpty()) tr("Пока пусто: уведомлений приложений ещё не приходило.", "No app notifications have arrived yet.")
+                else tr("Приложения не найдены", "No matching apps"),
                 color = Ui.Sub, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 8.dp))
         }
         Group {
             list.forEachIndexed { i, (pkg, label) ->
-                GroupRow(posOf(i, list.size), label, ruleLabel(s.msgAppRules[pkg]), onClick = { pick = pkg to label }) {
+                GroupRow(posOf(i, list.size), label, ruleLabel(s.msgAppRules[pkg]), onClick = {
+                    if (selecting) selected = if (pkg in selected) selected - pkg else selected + pkg
+                    else pick = pkg to label
+                }) {
                     val icon = remember(pkg) { NotificationParser.icon(context, pkg) }
-                    if (icon != null) {
+                    if (selecting) {
+                        Checkbox(pkg in selected, onCheckedChange = { checked ->
+                            selected = if (checked) selected + pkg else selected - pkg
+                        })
+                    } else if (icon != null) {
                         Image(icon, null, Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)))
                     } else {
                         ItemIcon(Icons.Rounded.Apps, Tile.Gray)
@@ -69,6 +98,16 @@ fun NotifAppsScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (bulkRule) {
+        ChoiceDialog(tr("Правило для выбранных", "Set rule for selected"), listOf<AppRule?>(null, AppRule.ALWAYS, AppRule.NEVER),
+            selected.map { s.msgAppRules[it] }.distinct().singleOrNull(), ::ruleLabel, { rule ->
+                SettingsRepo.update { copy(msgAppRules = if (rule == null) msgAppRules - selected
+                    else msgAppRules + selected.associateWith { rule }) }
+                selected = emptySet()
+                selecting = false
+            }) { bulkRule = false }
     }
 
     pick?.let { (pkg, label) ->

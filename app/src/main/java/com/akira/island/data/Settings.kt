@@ -172,7 +172,7 @@ enum class MessageIconPosition(private val ru: String, private val en: String) {
  */
 @Serializable
 enum class AppLanguage(val code: String) {
-    SYSTEM(""), RU("ru"), EN("en"), ID("id"), PT("pt"), KK("kk"), FR("fr"), ES("es");
+    SYSTEM(""), RU("ru"), EN("en"), ID("id"), PT("pt"), KK("kk"), FR("fr"), ES("es"), UK("uk");
 
     val title: String
         get() = when (this) {
@@ -184,6 +184,7 @@ enum class AppLanguage(val code: String) {
             KK -> "Қазақ тілі"
             FR -> "Français"
             ES -> "Español"
+            UK -> "Українська"
         }
 }
 
@@ -246,6 +247,7 @@ data class IslandSettings(
     val evPaySuccess: Boolean = true,
     /** Поставили будильник — плашка со временем подъёма */
     val evAlarmSet: Boolean = true,
+    val alarmDisplayOffsetMinutes: Int = 0,
 
     // Размер и положение, dp. Камера Android меньше, чем у iPhone (там капсула 126×37), поэтому и остров
     // по умолчанию меньше; ширина и высота настраиваются в «Положении и размере»

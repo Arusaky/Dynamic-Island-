@@ -25,7 +25,7 @@ import java.util.Locale
  */
 object Lang {
     /** Языки приложения: код → таблица переводов (у русского и английского таблиц нет) */
-    val codes = listOf("ru", "en", "id", "pt", "kk", "fr", "es")
+    val codes = listOf("ru", "en", "id", "pt", "kk", "fr", "es", "uk")
 
     private var assets: android.content.res.AssetManager? = null
     private var resources: Resources? = null
@@ -56,6 +56,7 @@ object Lang {
             "kk" -> Locale.forLanguageTag("kk")
             "fr" -> Locale.FRENCH
             "es" -> Locale.forLanguageTag("es")
+            "uk" -> Locale.forLanguageTag("uk-UA")
             else -> Locale.ENGLISH
         }
 

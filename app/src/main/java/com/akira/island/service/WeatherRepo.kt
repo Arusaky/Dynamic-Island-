@@ -2,6 +2,7 @@ package com.akira.island.service
 
 import android.content.Context
 import com.akira.island.core.IslandBus
+import com.akira.island.core.Lang
 import com.akira.island.core.tr
 import com.akira.island.data.ExtrasRepo
 import com.akira.island.data.ExtraSettings
@@ -23,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.text.Normalizer
 import com.akira.island.security.openTrustedHttps
 import com.akira.island.security.readUtf8Bounded
 
@@ -172,15 +174,8 @@ object WeatherRepo {
         require(temperature.isFinite() && temperature in -100.0..70.0)
         return WeatherInfo(city, temperature, c.getInt("weather_code"), time)
     }
-    suspend fun cities(query: String): List<WeatherCity> {
-        require(query.trim().length in 2..100)
-        val q = URLEncoder.encode(query.trim(), "UTF-8")
-        val a = JSONObject(get("https://geocoding-api.open-meteo.com/v1/search?name=$q&count=5&format=json")).optJSONArray("results") ?: return emptyList()
-        return (0 until a.length()).map { i ->
-            val c = a.getJSONObject(i)
-            WeatherCity(listOf(c.getString("name"), c.optString("admin1"), c.optString("country")).filter { it.isNotBlank() }.distinct().joinToString(", "), c.getDouble("latitude"), c.getDouble("longitude"))
-        }
-    }
+    suspend fun cities(query: String): List<WeatherCity> = searchWeatherCities(query, Lang.code, ::get)
+
     private suspend fun get(url: String): String = withContext(Dispatchers.IO) {
         val c = openTrustedHttps(url, 7000, 7000, mapOf("User-Agent" to "DynamicIsland/1.7.0"))
         try {
@@ -188,4 +183,45 @@ object WeatherRepo {
             c.inputStream.use { it.readUtf8Bounded(1_000_000) }
         } finally { c.disconnect() }
     }
+}
+
+/** Open-Meteo searches localized names using the requested language. */
+internal suspend fun searchWeatherCities(
+    query: String,
+    appLanguage: String,
+    fetch: suspend (String) -> String,
+): List<WeatherCity> {
+    val name = Normalizer.normalize(query.trim(), Normalizer.Form.NFC)
+    require(name.length in 2..100)
+    val encoded = URLEncoder.encode(name, "UTF-8")
+    val language = when {
+        name.contains(Regex("[іїєґ]", RegexOption.IGNORE_CASE)) -> "uk"
+        name.contains(Regex("[әғқңөұүһ]", RegexOption.IGNORE_CASE)) -> "kk"
+        name.contains(Regex("[а-яё]", RegexOption.IGNORE_CASE)) -> if (appLanguage == "kk") "kk" else "ru"
+        else -> appLanguage
+    }
+    val languages = listOfNotNull(language, appLanguage, "ru".takeIf { language == "kk" }, "en").distinct()
+    for (code in languages) {
+        val url = "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=5&language=$code&format=json"
+        val response = JSONObject(fetch(url))
+        check(!response.optBoolean("error")) { "City search provider returned an error" }
+        if (!response.has("results")) {
+            check(response.has("generationtime_ms")) { "Unexpected city search response" }
+            continue
+        }
+        val results = response.getJSONArray("results")
+        if (results.length() == 0) continue
+        return (0 until results.length()).map { index ->
+            val city = results.getJSONObject(index)
+            val label = listOf(city.getString("name"), city.optString("admin1"), city.optString("country"))
+                .filter { it.isNotBlank() }.distinct().joinToString(", ")
+            val latitude = city.getDouble("latitude")
+            val longitude = city.getDouble("longitude")
+            check(label.isNotBlank() && latitude in -90.0..90.0 && longitude in -180.0..180.0) {
+                "Invalid city search result"
+            }
+            WeatherCity(label, latitude, longitude)
+        }.distinct()
+    }
+    return emptyList()
 }

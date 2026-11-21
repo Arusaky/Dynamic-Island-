@@ -69,16 +69,23 @@ internal fun BriefPanel(
     val weatherLoading by WeatherRepo.loading.collectAsState()
     val weatherError by WeatherRepo.error.collectAsState()
     val details = briefDetails(extras, locked, steps, weather, now, weatherLoading, weatherError)
-    val pager = rememberPagerState(pageCount = { 3 })
+    val pages = briefPages(extras)
+    val pager = rememberPagerState(pageCount = { pages.size })
+    val currentPage = pager.currentPage.coerceIn(pages.indices)
+    fun pageTitle(page: BriefPage) = when (page) {
+        BriefPage.CLOCK -> tr("Дата и время", "Date and time")
+        BriefPage.STEPS -> tr("Шаги сегодня", "Steps today")
+        BriefPage.WEATHER -> tr("Погода", "Weather")
+    }
     val scope = rememberCoroutineScope()
     fun turnPage(delta: Int) {
         scope.launch {
-            val target = (pager.currentPage + delta).coerceIn(0, 2)
+            val target = (currentPage + delta).coerceIn(pages.indices)
             if (s.reduceEffects) pager.scrollToPage(target) else pager.animateScrollToPage(target)
         }
     }
-    val pageTitles = listOf(tr("Дата и время", "Date and time"), tr("Шаги сегодня", "Steps today"), tr("Погода", "Weather"))
-    val pageDescription = trf("Страница {0} из {1}: {2}", "Page {0} of {1}: {2}", pager.currentPage + 1, 3, pageTitles[pager.currentPage])
+    val pageDescription = trf("Страница {0} из {1}: {2}", "Page {0} of {1}: {2}",
+        currentPage + 1, pages.size, pageTitle(pages[currentPage]))
     // Pages wrap their content. A finite cross-axis cap also supports the outer vertical scroller.
     val maxPageHeight = (480f * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
     // Keep line height relative when FitText reduces a clock or grows the step count.
@@ -87,40 +94,41 @@ internal fun BriefPanel(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = { turnPage(-1) },
-                    enabled = pager.currentPage > 0,
+                    enabled = currentPage > 0,
                     modifier = Modifier.size(48.dp).testTag("brief-previous"),
-                ) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, tr("Предыдущая страница", "Previous page"), tint = Color.White.copy(alpha = if (pager.currentPage > 0) 0.8f else 0.2f)) }
+                ) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, tr("Предыдущая страница", "Previous page"), tint = Color.White.copy(alpha = if (currentPage > 0) 0.8f else 0.2f)) }
                 Column(Modifier.weight(1f).semantics(mergeDescendants = true) { stateDescription = pageDescription }, horizontalAlignment = Alignment.CenterHorizontally) {
                     FitText(tr("Сводка", "Brief"), Color.White, 14.sp, 8.sp, FontWeight.SemiBold.island)
                     Row(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        repeat(3) { page ->
+                        repeat(pages.size) { page ->
                             Box(Modifier.size(5.dp).clip(CircleShape)
-                                .background(Color.White.copy(alpha = if (pager.currentPage == page) 0.9f else 0.25f)))
+                                .background(Color.White.copy(alpha = if (currentPage == page) 0.9f else 0.25f)))
                         }
                     }
                 }
                 IconButton(
                     onClick = { turnPage(1) },
-                    enabled = pager.currentPage < 2,
+                    enabled = currentPage < pages.lastIndex,
                     modifier = Modifier.size(48.dp).testTag("brief-next"),
-                ) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, tr("Следующая страница", "Next page"), tint = Color.White.copy(alpha = if (pager.currentPage < 2) 0.8f else 0.2f)) }
+                ) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, tr("Следующая страница", "Next page"), tint = Color.White.copy(alpha = if (currentPage < pages.lastIndex) 0.8f else 0.2f)) }
             }
             HorizontalPager(
                 state = pager,
                 modifier = Modifier.fillMaxWidth().heightIn(max = maxPageHeight).testTag("brief-pages"),
-                key = { it },
-            ) { page ->
+                key = { pages[it] },
+            ) { index ->
+                val page = pages[index]
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = 1.dp)
                         .clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.06f))
-                        .padding(8.dp).testTag("brief-page-$page"),
+                        .padding(8.dp).testTag("brief-page-${page.ordinal}"),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    FitText(pageTitles[page], Tints.Lavender, 13.sp, 9.sp, FontWeight.Medium.island, Modifier.fillMaxWidth())
+                    FitText(pageTitle(page), Tints.Lavender, 13.sp, 9.sp, FontWeight.Medium.island, Modifier.fillMaxWidth())
                     when (page) {
-                        0 -> BriefClockPage(s, extras.briefClockStyle, battery, now, time, date, alarm, locked)
-                        1 -> BriefStepsPage(details)
-                        2 -> BriefWeatherPage(details) { scope.launch { WeatherRepo.refresh() } }
+                        BriefPage.CLOCK -> BriefClockPage(s, extras.briefClockStyle, battery, now, time, date, alarm, locked)
+                        BriefPage.STEPS -> BriefStepsPage(details)
+                        BriefPage.WEATHER -> BriefWeatherPage(details) { scope.launch { WeatherRepo.refresh() } }
                     }
                 }
             }

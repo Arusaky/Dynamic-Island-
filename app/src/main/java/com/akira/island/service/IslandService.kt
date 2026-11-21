@@ -144,10 +144,9 @@ class IslandService : AccessibilityService() {
     private var visible = true
     private var body = Rect.Zero
     private var bubble = Rect.Zero
-    /** С какого момента (uptimeMillis) окно касаний ждёт перекладки; 0 — не ждёт */
-    private var touchSince = 0L
+    private var touchPending = false
     private val touchUpdate = Runnable {
-        touchSince = 0L
+        touchPending = false
         updateTouchWindow()
     }
     /** Скриншот без острова: снимок — когда окно уже прозрачное, остров возвращается после */
@@ -196,10 +195,11 @@ class IslandService : AccessibilityService() {
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
         PixelFormat.TRANSLUCENT,
     ).apply {
-        gravity = Gravity.TOP or Gravity.START
+        gravity = Gravity.TOP or Gravity.LEFT
         title = "DynamicIslandTouch"
         x = -10
         y = -10
+        flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         cutoutAlways()
     }
 
@@ -398,6 +398,7 @@ class IslandService : AccessibilityService() {
             }
         }
         drawRoot.addView(compose)
+        drawRoot.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> scheduleTouchWindow() }
         drawRoot.viewTreeObserver.addOnPreDrawListener {
             // Sample animated graphics-layer transforms even when content itself is cached.
             backdropSampler?.invoke()
@@ -583,14 +584,13 @@ class IslandService : AccessibilityService() {
 
     private fun onBoundsChanged() {
         scheduleBackdrop()
-        // Во время анимации границы меняются каждый кадр, а перекладка окна — вызов системы посреди кадра,
-        // от которого остров может дёрнуться, а на ColorOS — пропасть на треть секунды. Поэтому окно касаний
-        // перекладывается один раз, когда остров замер (120 мс без изменений), а если он движется долго
-        // (пасхалка) — не чаще раза в три секунды
-        val now = SystemClock.uptimeMillis()
-        if (touchSince == 0L) touchSince = now
-        handler.removeCallbacks(touchUpdate)
-        handler.postAtTime(touchUpdate, minOf(now + TOUCH_QUIET_MS, touchSince + TOUCH_MAX_WAIT_MS))
+        scheduleTouchWindow()
+    }
+
+    private fun scheduleTouchWindow() {
+        if (touchPending) return
+        touchPending = true
+        handler.postDelayed(touchUpdate, 16)
     }
 
     private fun updateTouchWindow() {
@@ -603,24 +603,21 @@ class IslandService : AccessibilityService() {
                 maxOf(body.right, bubble.right), maxOf(body.bottom, bubble.bottom),
             )
         }
-        val usable = visible && !area.isEmpty
         val origin = IntArray(2)
         display?.getLocationOnScreen(origin)
-        val x = if (usable) origin[0] + floor(area.left).toInt() else -10
-        val y = if (usable) origin[1] + floor(area.top).toInt() else -10
-        val w = if (usable) ceil(area.width).toInt().coerceAtLeast(1) else 1
-        val h = if (usable) ceil(area.height).toInt().coerceAtLeast(1) else 1
+        val left = origin[0] + floor(area.left).toInt()
+        val right = origin[0] + ceil(area.right).toInt()
+        val bottom = origin[1] + ceil(area.bottom).toInt()
+        val top = maxOf(origin[1] + floor(area.top).toInt(), dp(STATUS_BAR_SWIPE_DP))
+        val usable = visible && !area.isEmpty && bottom > top && right > left
+        val x = if (usable) left else -10
+        val y = if (usable) top else -10
+        val w = if (usable) right - left else 1
+        val h = if (usable) bottom - top else 1
         val flags = if (usable) touchParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
         else touchParams.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         if (touchParams.x == x && touchParams.y == y && touchParams.width == w && touchParams.height == h &&
             touchParams.flags == flags
-        ) return
-        // Остров чуть сдвинулся или уменьшился, но остался внутри окна касаний — окно не трогаем: каждая
-        // перекладка — лишний вызов системы и риск мигания на некоторых оболочках
-        val slack = dp(8)
-        if (usable && flags == touchParams.flags && x >= touchParams.x && y >= touchParams.y &&
-            x + w <= touchParams.x + touchParams.width && y + h <= touchParams.y + touchParams.height &&
-            touchParams.width - w <= slack && touchParams.height - h <= slack
         ) return
         touchParams.x = x
         touchParams.y = y
@@ -809,10 +806,9 @@ class IslandService : AccessibilityService() {
         val cls = event.className?.toString().orEmpty()
         if (pkg == "com.android.systemui" || isKeyboard(pkg, cls)) return
         // Окно оплаты из сервисов Google (поднесли телефон к терминалу) — не «открытое приложение»
-        if (pkg == PayMonitor.GMS && "tapandpay" in cls.lowercase()) {
-            PayMonitor.onTapAndPay(this)
+        if (pkg == PayMonitor.GMS && PayScreenParser.isGooglePaymentCandidate(cls)) {
             payReader?.onTapAndPay()
-            setScreenEvents(true)
+            setScreenEvents(clockReader?.active == true || payReader?.active == true)
             return
         }
         if (pkg == packageName && !cls.endsWith("Activity")) return
@@ -931,8 +927,8 @@ class TouchRoot(
 
 /** Высота окна острова без поправки на крупный текст, dp */
 private const val WINDOW_BAND_DP = 480
-private const val TOUCH_QUIET_MS = 120L
-private const val TOUCH_MAX_WAIT_MS = 3000L
+// Leave the top edge available for the native notification-shade gesture.
+private const val STATUS_BAR_SWIPE_DP = 8
 
 /** Границы до целых пикселей наружу */
 private fun Rect.snapped() = Rect(floor(left), floor(top), ceil(right), ceil(bottom))

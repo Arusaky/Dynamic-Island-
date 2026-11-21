@@ -83,6 +83,9 @@ object PayScreenParser {
     /** Первая сумма с валютой в тексте: «89,99 ₽», «1 250 руб.», «$12.50», «Rp 50.000». */
     fun amount(text: String): String? = amount.find(normalize(text))?.value?.trim()
 
+    internal fun isGooglePaymentCandidate(className: String): Boolean =
+        className.startsWith("com.google.android.gms.tapandpay.", ignoreCase = true)
+
     /** Экран оплаты телефоном. */
     fun ready(text: String) = readyWords.containsMatchIn(normalize(text))
 
@@ -143,7 +146,8 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
             stop()
             start(PayMonitor.GMS)
         }
-        markReady(PayMonitor.GMS)
+        if (current != PayMonitor.GMS) return
+        schedule(150)
         stopJob?.cancel()
         stopJob = scope.launch {
             delay(60_000)

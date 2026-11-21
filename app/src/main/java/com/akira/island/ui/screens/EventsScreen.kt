@@ -160,6 +160,15 @@ fun EventsScreen(onBack: () -> Unit) {
             GroupToggle(Pos.First, Icons.Rounded.Alarm, tr("Будильник поставлен", "Alarm set"),
                 tr("Время подъёма и сколько осталось спать", "Wake-up time and how long you can sleep"),
                 s.evAlarmSet, color = Tile.Orange) { set { copy(evAlarmSet = it) } }
+            var offsetPicker by remember { mutableStateOf(false) }
+            GroupItem(Pos.Middle, Icons.Rounded.Alarm, tr("Поправка времени будильника", "Alarm time adjustment"),
+                alarmOffsetLabel(s.alarmDisplayOffsetMinutes), color = Tile.Orange, onClick = { offsetPicker = true })
+            if (offsetPicker) com.akira.island.ui.ChoiceDialog(
+                tr("Поправка времени будильника", "Alarm time adjustment"),
+                (-120..120 step 15).toList(), s.alarmDisplayOffsetMinutes, ::alarmOffsetLabel,
+                { minutes -> set { copy(alarmDisplayOffsetMinutes = minutes) } },
+                { offsetPicker = false },
+            )
             GroupToggle(Pos.Middle, Icons.Rounded.Lock, tr("Замок на экране блокировки", "Lock on the lock screen"),
                 tr("Пока телефон заблокирован, в капсуле замок", "While the phone is locked, the capsule shows a lock"),
                 s.evLock, color = Tile.Indigo) { set { copy(evLock = it) } }
@@ -167,8 +176,16 @@ fun EventsScreen(onBack: () -> Unit) {
                 tr("Замок открывается, когда вы разблокируете телефон", "A lock opens when you unlock the phone"),
                 s.evUnlock, color = Tile.Purple) { set { copy(evUnlock = it) } }
         }
+        SettingsHint(tr(
+            "Если время в острове расходится с приложением «Часы», укажите разницу. Поправка меняет отображение и отсчёт в острове; будильник Android звонит по своему расписанию.",
+            "If the island and Clock show different times, set the difference. This adjusts the island display and countdown; Android keeps the alarm schedule.",
+        ))
     }
 }
+
+private fun alarmOffsetLabel(minutes: Int): String =
+    if (minutes == 0) tr("Как в системе", "System time")
+    else "${if (minutes > 0) "+" else "−"}${kotlin.math.abs(minutes)} ${tr("мин", "min")}"
 
 @Composable
 private fun EventReading(kind: ConnectionEvent, value: Boolean?, observing: Boolean, onExample: (Notice) -> Unit) {

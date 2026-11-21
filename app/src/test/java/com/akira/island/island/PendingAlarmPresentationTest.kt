@@ -22,6 +22,16 @@ class PendingAlarmPresentationTest {
         assertEquals(alarm, secondaryWithPendingAlarm(listOf(alarm, other), other))
         assertNull(secondaryWithPendingAlarm(listOf(other), other))
     }
+    @Test fun explicitControlsSelectionOverridesAnOrdinaryActivityUntilCollapse() {
+        assertEquals(Act.Idle, primaryWithPendingAlarm(listOf(other, alarm), true, Act.Idle.id))
+        assertEquals(other, primaryWithPendingAlarm(listOf(other, alarm), false, null))
+    }
+
+    @Test fun aRingingTimerCanInterruptExplicitControls() {
+        val ringing = Act.TimerA(com.akira.island.core.TimerState(60_000L, 123_456L, ringing = true))
+        assertEquals(ringing, primaryWithPendingAlarm(listOf(ringing, other), true, Act.Idle.id))
+    }
+
     @Test fun noAlarmPreservesTheExistingFallback() {
         assertEquals(Act.Idle, primaryWithPendingAlarm(emptyList(), false, null))
         assertEquals(other, primaryWithPendingAlarm(listOf(other), false, null))

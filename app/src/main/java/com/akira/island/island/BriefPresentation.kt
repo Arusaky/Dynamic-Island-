@@ -4,6 +4,11 @@ import com.akira.island.data.ExtraSettings
 import com.akira.island.service.WeatherInfo
 import com.akira.island.service.WEATHER_MAX_AGE_MS
 
+internal enum class BriefPage { CLOCK, STEPS, WEATHER }
+
+internal fun briefPages(extras: ExtraSettings): List<BriefPage> =
+    if (extras.briefShowSteps) BriefPage.entries else listOf(BriefPage.CLOCK, BriefPage.WEATHER)
+
 internal enum class BriefDataStatus { HIDDEN, DISABLED, UNAVAILABLE, READY }
 
 /** Values are removed here, before either visible text or accessibility semantics are composed. */

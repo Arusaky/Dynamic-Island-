@@ -172,7 +172,8 @@ fun IslandOverlay(
     val expanded by IslandBus.expanded.collectAsState()
     val focus by IslandBus.focus.collectAsState()
     val calibrating by IslandBus.calibrating.collectAsState()
-    val nextAlarm by IslandBus.nextAlarm.collectAsState()
+    val systemAlarm by IslandBus.nextAlarm.collectAsState()
+    val nextAlarm = systemAlarm?.withDisplayOffset(s.alarmDisplayOffsetMinutes)
     val egg by IslandBus.egg.collectAsState()
     val payReady by IslandBus.payReady.collectAsState()
     val inbox by IslandBus.inbox.collectAsState()
@@ -631,8 +632,7 @@ internal fun IslandBody(
     val settings by rememberUpdatedState(s)
     val realEgg by IslandBus.egg.collectAsState()
     val egg = realEgg && !preview
-    // Native material follows the drawn contour, including spring/drag transforms.
-    // Touch bounds retain their existing behavior.
+    // The hit area and native material both follow the drawn contour.
     val reportedBackdrop = remember { arrayOfNulls<BackdropGeometry>(1) }
     val backdropCoordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
     val backdropDensity = LocalDensity.current
@@ -659,7 +659,6 @@ internal fun IslandBody(
     }
     Box(
         Modifier
-            .onGloballyPositioned { onBounds(it.boundsInWindow()) }
             .graphicsLayer {
                 // Пасхалка: остров подпрыгивает в такт песни; оплата прошла — на миг подрастает
                 val bump = if (preview) 1f else Egg.bump() * PayFx.pop.floatValue
@@ -668,7 +667,11 @@ internal fun IslandBody(
                 translationX = shake.value.dp.toPx()
                 transformOrigin = TransformOrigin(0.5f, 0f)
             }
-            .onGloballyPositioned { backdropCoordinates[0] = it; reportBackdrop() }
+            .onGloballyPositioned {
+                onBounds(it.boundsInWindow())
+                backdropCoordinates[0] = it
+                reportBackdrop()
+            }
             .then(if (s.liquidGlass && !preview && onBackdropShape != null) Modifier.drawWithContent {
                 reportBackdrop()
                 drawContent()
@@ -771,7 +774,7 @@ internal fun IslandBody(
                             !isExpanded && !vertical && abs(dx) > side && act is Act.MediaA && settings.swipeTracks -> {
                                 haptic()
                                 // Как в ПК-версии: толкнуть влево — следующий трек
-                                if (dx < 0) Controls.next() else Controls.prev()
+                                if (dx < 0) Controls.next(act.m.pkg) else Controls.prev(act.m.pkg)
                             }
                         }
                     },
@@ -926,13 +929,11 @@ private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettin
         is Act.NoticeA -> {
             // Пока вводят ответ, нажатие по карточке не должно открывать приложение
             if (IslandBus.reply.value != null) return
-            // Нажатие на уведомление приложения открывает его, как на iPhone
             if (act.n.message != null) {
-                if (s.tapAction == TapAction.DISMISS_NOTIFICATION) {
-                    perform(context, s.tapAction, act)
-                    return
+                when (s.tapAction) {
+                    TapAction.OPEN_APP, TapAction.DISMISS_NOTIFICATION -> perform(context, s.tapAction, act)
+                    else -> IslandBus.messageDetail.value = true
                 }
-                IslandBus.messageDetail.value = true
                 return
             }
             act.n.openPkg?.let { Controls.openApp(context, it) }
@@ -964,7 +965,11 @@ private fun perform(context: Context, action: TapAction, act: Act) {
         when (action) {
             TapAction.OPEN_APP -> {
                 if (!Controls.send(context, message.intent)) Controls.openApp(context, message.pkg)
-                IslandBus.notice.value = null
+                if (IslandBus.notice.value?.id == act.n.id) {
+                    IslandBus.messageDetail.value = false
+                    IslandBus.noticeHold.value = false
+                    IslandBus.notice.value = null
+                }
             }
             TapAction.DISMISS_NOTIFICATION -> {
                 if (!com.akira.island.service.NotifListener.dismiss(message.key)) android.widget.Toast.makeText(context,
@@ -1102,10 +1107,14 @@ fun islandShape(corner: Dp, notch: Boolean): RoundedCornerShape =
     if (notch) RoundedCornerShape(0.dp, 0.dp, corner, corner) else RoundedCornerShape(corner)
 
 /** Форма острова со скруглением из анимации: рамка и стекло читают его при рисовании и обновляются без пересборки. */
-private class AnimatedIslandShape(private val corner: State<Dp>, private val notch: Boolean, private val topRadius: Int) : Shape {
-    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
-        (if (notch) RoundedCornerShape(topRadius.dp, topRadius.dp, corner.value, corner.value) else RoundedCornerShape(corner.value))
-            .createOutline(size, layoutDirection, density)
+internal class AnimatedIslandShape(private val corner: State<Dp>, private val notch: Boolean, private val topRadius: Int) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        // A spring can overshoot past zero when the user selects square corners.
+        val radius = corner.value.coerceAtLeast(0.dp)
+        val top = topRadius.coerceAtLeast(0).dp
+        val shape = if (notch) RoundedCornerShape(top, top, radius, radius) else RoundedCornerShape(radius)
+        return shape.createOutline(size, layoutDirection, density)
+    }
 }
 
 /** Заливка острова: цвет из «Цвета капсулы» с непрозрачностью из «Оформления». */
