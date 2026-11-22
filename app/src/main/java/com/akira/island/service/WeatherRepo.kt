@@ -29,7 +29,7 @@ import com.akira.island.security.openTrustedHttps
 import com.akira.island.security.readUtf8Bounded
 
 /** No location permission: users select the city sent to Open-Meteo. */
-data class WeatherInfo(val city: String, val temperature: Double, val code: Int, val updatedAt: Long) {
+data class WeatherInfo(val city: String, val temperature: Double, val code: Int, val updatedAt: Long, val isDay: Boolean? = null) {
     fun summary(): String = when (code) {
         0 -> tr("Ясно", "Clear sky")
         1, 2, 3 -> tr("Облачно", "Cloudy")
@@ -145,7 +145,7 @@ object WeatherRepo {
     private val loader = WeatherLoader(
         selected = { weatherTarget(ExtrasRepo.state.value) },
         fetch = { target ->
-            val body = get("https://api.open-meteo.com/v1/forecast?latitude=${target.latitude}&longitude=${target.longitude}&current=temperature_2m,weather_code")
+            val body = get("https://api.open-meteo.com/v1/forecast?latitude=${target.latitude}&longitude=${target.longitude}&current=temperature_2m,weather_code,is_day")
             parse(body, target.city, System.currentTimeMillis())
         },
         failureMessage = { tr("Не удалось обновить погоду. Проверьте подключение.", "Weather update failed. Check your connection.") },
@@ -172,7 +172,8 @@ object WeatherRepo {
         val c = JSONObject(body).getJSONObject("current")
         val temperature = c.getDouble("temperature_2m")
         require(temperature.isFinite() && temperature in -100.0..70.0)
-        return WeatherInfo(city, temperature, c.getInt("weather_code"), time)
+        val isDay = when (c.optInt("is_day", -1)) { 0 -> false; 1 -> true; else -> null }
+        return WeatherInfo(city, temperature, c.getInt("weather_code"), time, isDay)
     }
     suspend fun cities(query: String): List<WeatherCity> = searchWeatherCities(query, Lang.code, ::get)
 

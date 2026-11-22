@@ -22,10 +22,10 @@ import kotlin.math.sin
 
 /** Two short green crests inside the charging surface, behind its battery reading. */
 @Composable
-internal fun chargingWave(s: IslandSettings, eventId: Long?, expanded: Boolean): Modifier {
+internal fun chargingWave(s: IslandSettings, eventId: Long): Modifier {
     val screenOn by IslandBus.screenOn.collectAsState()
     if (!screenOn || s.reduceEffects || s.expandStyle == ExpandStyle.INSTANT) return Modifier
-    val phase = remember(eventId, expanded) { Animatable(0f) }
+    val phase = remember(eventId) { Animatable(0f) }
     LaunchedEffect(phase) { phase.animateTo(1f, tween(1050, easing = LinearEasing)) }
     return Modifier.drawWithCache {
         val w = size.width

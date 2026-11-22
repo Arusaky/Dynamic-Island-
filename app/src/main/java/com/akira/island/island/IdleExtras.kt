@@ -7,8 +7,6 @@ import android.provider.CallLog
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -22,10 +20,6 @@ import com.akira.island.core.IslandBus
 import com.akira.island.core.tr
 import com.akira.island.data.ExtrasRepo
 import com.akira.island.data.IslandSettings
-import com.akira.island.service.WeatherInfo
-import java.text.DateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun IdleExtras(s: IslandSettings) {
@@ -81,26 +75,6 @@ fun IdleExtras(s: IslandSettings) {
                     }
                 }) { Text(tr("Журнал звонков", "Call history")) }
                 TextButton(onClick = { open(Intent(context, com.akira.island.ui.MainActivity::class.java)) }) { Text(tr("Настройки", "Settings")) }
-            }
-        }
-    }
-}
-
-@Composable
-fun WeatherDetails(weather: WeatherInfo) {
-    val extras by ExtrasRepo.state.collectAsState()
-    val locked by IslandBus.locked.collectAsState()
-    val preview = LocalIslandPreview.current
-    val scroll = rememberScrollState()
-    Column(Modifier.verticalScroll(scroll, enabled = scroll.maxValue > 0), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(weather.city, color = Color.White, fontSize = 18.sp)
-        Text(String.format(Locale.ROOT, "%.0f°C", weather.temperature), color = Color.White, fontSize = 36.sp, style = Digits)
-        Text(weather.summary(), color = Color.White, fontSize = 16.sp)
-        Text(tr("Обновлено", "Updated") + " " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(weather.updatedAt)), color = Color.Gray, fontSize = 12.sp)
-        Text("Open-Meteo · CC BY 4.0", color = Color.Gray, fontSize = 12.sp)
-        if (!locked && !preview && extras.hasIdleExtras) {
-            TextButton(onClick = { Controls.expand(Act.Idle.id) }) {
-                Text(tr("Дополнительная панель", "Extra controls"))
             }
         }
     }

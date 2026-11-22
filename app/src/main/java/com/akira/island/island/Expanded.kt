@@ -95,6 +95,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -156,7 +157,6 @@ private fun ExpandedContentBody(act: Act, s: IslandSettings, lyrics: Lyrics?, ba
         Scaled(s.contentScale) {
             when (act) {
                 is Act.HotspotA -> HotspotDetails(act.status)
-                is Act.WeatherA -> WeatherDetails(act.weather)
                 is Act.MediaA -> MediaExpanded(act.m, s, lyrics, battery)
                 is Act.TimerA -> TimerExpanded(act.t, s)
                 is Act.StopwatchA -> StopwatchExpanded(act.w)
@@ -892,7 +892,11 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
                 }
             }
         }
-        if (!extras.briefEnabled) PinnedShortcutRow()
+        val compactActions = extras.showWeatherInPanel && !locked
+        if (!extras.briefEnabled) {
+            if (compactActions) PanelWeather(s, extras, now)
+            PinnedShortcutRow()
+        }
         if (battery.charging) {
             val measurements = listOfNotNull(
                 battery.powerWatts?.let { trf("{0} Вт на батарее", "{0} W at battery", String.format(java.util.Locale.ROOT, "%.1f", it)) },
@@ -909,21 +913,28 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
         val actions = if (extras.briefEnabled && locked) emptyList() else s.quickActions
         val alarmCreator = s.showAlarmCreator && !locked
         if (actions.isEmpty() && !alarmCreator) return@Column
-        Spacer(Modifier.height(16.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(Modifier.height(if (compactActions) 6.dp else 16.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(if (compactActions) 2.dp else 10.dp)) {
             if (alarmCreator) PillButton(Ios.alarm, tr("Новый будильник", "New alarm"),
-                bg = Tints.Orange.copy(alpha = 0.2f), fg = Tints.Orange, modifier = Modifier.fillMaxWidth()) {
+                bg = Tints.Orange.copy(alpha = 0.2f), fg = Tints.Orange, modifier = Modifier.fillMaxWidth(), compact = compactActions) {
                 val intent = android.content.Intent(context, com.akira.island.ui.SystemAlarmActivity::class.java)
                     .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                 if (runCatching { context.startActivity(intent) }.isSuccess) Controls.collapse()
                 else android.widget.Toast.makeText(context, tr("Не удалось открыть редактор будильника", "Could not open the alarm editor"), android.widget.Toast.LENGTH_SHORT).show()
             }
             // Таймер от 1 до 99 минут
-            if (QuickAction.TIMER in actions) IdleTimerPicker(s)
-            // Остальные кнопки — по две в ряд, в порядке из настроек
-            actions.filter { it != QuickAction.TIMER }.chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { QuickButton(it, context, Modifier.weight(1f)) }
+            if (QuickAction.TIMER in actions) IdleTimerPicker(s, compactActions)
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val columns = if (compactActions)
+                    (maxWidth.value / (90f * LocalDensity.current.fontScale.coerceAtLeast(1f))).toInt().coerceIn(1, 4)
+                else 2
+                Column(verticalArrangement = Arrangement.spacedBy(if (compactActions) 2.dp else 10.dp)) {
+                    actions.filter { it != QuickAction.TIMER }.chunked(columns).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(if (compactActions) 6.dp else 10.dp)) {
+                            row.forEach { QuickButton(it, context, Modifier.weight(1f), compactActions) }
+                            if (compactActions) repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
                 }
             }
         }
@@ -932,24 +943,24 @@ private fun IdleExpanded(s: IslandSettings, battery: BatteryInfo) {
 
 /** Narrow cards put the start button below the stepper instead of squeezing its text away. */
 @Composable
-internal fun IdleTimerPicker(s: IslandSettings) {
+internal fun IdleTimerPicker(s: IslandSettings, compact: Boolean = false) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val stacked = maxWidth < 280.dp
+        val stacked = maxWidth < (if (compact) 246.dp else 280.dp) * LocalDensity.current.fontScale.coerceAtLeast(1f)
         val stepper: @Composable (Modifier) -> Unit = { modifier ->
-            Row(modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.08f)).padding(6.dp),
+            Row(modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.08f)).padding(if (compact) 3.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                RoundButton(Ios.remove, size = 38.dp, iconScale = 0.44f) {
+                RoundButton(Ios.remove, size = if (compact) 32.dp else 38.dp, iconScale = 0.44f) {
                     SettingsRepo.update { copy(timerMinutes = (timerMinutes - 1).coerceAtLeast(1)) }
                 }
                 Text(trf("{0} мин", "{0} min", s.timerMinutes), color = Color.White, fontSize = 16.sp, style = Digits,
                     maxLines = 1, softWrap = false, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-                RoundButton(Ios.add, size = 38.dp, iconScale = 0.44f) {
+                RoundButton(Ios.add, size = if (compact) 32.dp else 38.dp, iconScale = 0.44f) {
                     SettingsRepo.update { copy(timerMinutes = (timerMinutes + 1).coerceAtMost(99)) }
                 }
             }
         }
         val start: @Composable (Modifier) -> Unit = { modifier ->
-            PillButton(Ios.play, tr("Таймер", "Timer"), modifier = modifier, bg = Tints.Orange, fg = Color.Black) {
+            PillButton(Ios.play, tr("Таймер", "Timer"), modifier = modifier, bg = Tints.Orange, fg = Color.Black, compact = compact) {
                 Controls.startTimer(s.timerMinutes)
                 Controls.expand("timer")
             }
@@ -965,7 +976,7 @@ internal fun IdleTimerPicker(s: IslandSettings) {
 }
 
 @Composable
-private fun QuickButton(a: QuickAction, context: Context, modifier: Modifier) {
+private fun QuickButton(a: QuickAction, context: Context, modifier: Modifier, compact: Boolean) {
     val ringer by IslandBus.ringer.collectAsState()
     val dnd by IslandBus.dnd.collectAsState()
     val icon = when (a) {
@@ -992,7 +1003,7 @@ private fun QuickButton(a: QuickAction, context: Context, modifier: Modifier) {
         else -> a.short
     }
     val on = a == QuickAction.DND && dnd
-    PillButton(icon, label, modifier, bg = if (on) Tints.Purple else Color.White.copy(alpha = 0.14f)) {
+    PillButton(icon, label, modifier, bg = if (on) Tints.Purple else Color.White.copy(alpha = 0.14f), compact = compact) {
         when (a) {
             QuickAction.STOPWATCH -> {
                 Controls.startStopwatch()

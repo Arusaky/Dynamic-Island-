@@ -101,14 +101,19 @@ class FollowupRegressionTest {
         assertEquals(Color.White, textColor("Test track"))
     }
 
-    @Test fun weatherAppearsAsItsOwnCardAndInBrief() {
+    @Test fun weatherSharesTheExpandedControlsAndStaysOutOfCompactActivities() {
         val reading = WeatherInfo("Moscow", 12.0, 0, System.currentTimeMillis())
         compose.runOnUiThread {
             ExtrasRepo.update { ExtraSettings(weatherEnabled = true, weatherCity = reading.city, latitude = 55.75, longitude = 37.62) }
             WeatherRepo.state.value = reading
         }
         render { IslandOverlay() }
-        compose.onNodeWithText("12°").assertIsDisplayed().performTouchInput { click() }
+        compose.onNodeWithText("12°").assertDoesNotExist()
+        compose.onNodeWithText("Moscow").assertDoesNotExist()
+        compose.runOnUiThread { Controls.expand("idle") }
+        compose.onNodeWithTag("expanded-idle").assertIsDisplayed()
+        compose.onNodeWithText("Timer").assertIsDisplayed()
+        compose.onNodeWithText("12°").assertIsDisplayed()
         compose.onNodeWithText("Moscow").assertIsDisplayed()
         screenshot("weather-card")
         compose.runOnUiThread {

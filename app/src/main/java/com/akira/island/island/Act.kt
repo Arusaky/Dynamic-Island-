@@ -20,7 +20,6 @@ sealed class Act(val id: String, val transient: Boolean = false) {
 
     data object Idle : Act("idle")
     data class HotspotA(val status: com.akira.island.service.HotspotStatus) : Act("hotspot")
-    data class WeatherA(val weather: com.akira.island.service.WeatherInfo) : Act("weather")
     data class NoticeA(val n: Notice) : Act("notice", transient = true)
     data class TimerA(val t: TimerState) : Act("timer")
     data class StopwatchA(val w: StopwatchState) : Act("stopwatch")

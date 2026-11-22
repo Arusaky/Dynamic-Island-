@@ -29,6 +29,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -388,21 +389,25 @@ fun PillButton(
     modifier: Modifier = Modifier,
     bg: Color = Color.White.copy(alpha = 0.14f),
     fg: Color = Color.White,
+    compact: Boolean = false,
     onClick: () -> Unit,
 ) {
     val haptic = rememberHaptic()
-    Row(
-        modifier
+    val tap = Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button) { haptic(); onClick() }
+    val surface = if (compact) modifier.then(tap).heightIn(min = 48.dp).padding(vertical = 7.dp)
+        .clip(CircleShape).background(controlTint(bg))
+    else modifier
             .clip(CircleShape)
             .background(controlTint(bg))
-            .clickable { haptic(); onClick() }
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .then(tap)
+    Row(
+        surface.padding(horizontal = if (compact) 8.dp else 14.dp, vertical = if (compact) 5.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = controlTint(fg), modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(6.dp))
+        Icon(icon, null, tint = controlTint(fg), modifier = Modifier.size(if (compact) 16.dp else 20.dp))
+        Spacer(Modifier.width(if (compact) 4.dp else 6.dp))
         // Длинная подпись («Не беспокоить», «Без звука») чуть уменьшается, а не обрезается
-        FitText(text, controlTint(fg), 14.sp, 11.sp, FontWeight.Medium.island, Modifier.weight(1f, fill = false), customizable = false)
+        FitText(text, controlTint(fg), if (compact) 12.sp else 14.sp, 11.sp, FontWeight.Medium.island, Modifier.weight(1f, fill = false), customizable = false)
     }
 }
 

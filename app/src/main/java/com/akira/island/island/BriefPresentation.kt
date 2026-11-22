@@ -38,7 +38,7 @@ internal fun briefDetails(
         visibleSteps == null -> BriefDataStatus.UNAVAILABLE
         else -> BriefDataStatus.READY
     }
-    val weatherEnabled = extras.weatherEnabled && extras.weatherCity.isNotBlank()
+    val weatherEnabled = extras.showWeatherInPanel
     val visibleWeather = weather?.takeIf {
         weatherEnabled && it.city == extras.weatherCity && it.temperature.isFinite() &&
             now - it.updatedAt in 0..WEATHER_MAX_AGE_MS

@@ -46,6 +46,7 @@ import com.akira.island.data.BriefClockStyle
 import com.akira.island.data.ExtraSettings
 import com.akira.island.data.IslandSettings
 import com.akira.island.service.StepRepo
+import com.akira.island.service.WeatherInfo
 import com.akira.island.service.WeatherRepo
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
@@ -126,9 +127,9 @@ internal fun BriefPanel(
                 ) {
                     FitText(pageTitle(page), Tints.Lavender, 13.sp, 9.sp, FontWeight.Medium.island, Modifier.fillMaxWidth())
                     when (page) {
-                        BriefPage.CLOCK -> BriefClockPage(s, extras.briefClockStyle, battery, now, time, date, alarm, locked)
+                        BriefPage.CLOCK -> BriefClockPage(s, extras.briefClockStyle, battery, now, time, date, alarm, locked, details.weather)
                         BriefPage.STEPS -> BriefStepsPage(details)
-                        BriefPage.WEATHER -> BriefWeatherPage(details) { scope.launch { WeatherRepo.refresh() } }
+                        BriefPage.WEATHER -> BriefWeatherPage(s, details) { scope.launch { WeatherRepo.refresh() } }
                     }
                 }
             }
@@ -146,6 +147,7 @@ private fun ColumnScope.BriefClockPage(
     date: String,
     alarm: AlarmInfo?,
     locked: Boolean,
+    weather: WeatherInfo?,
 ) {
     val context = LocalContext.current
     when (style) {
@@ -175,14 +177,23 @@ private fun ColumnScope.BriefClockPage(
     Text(date, color = Color.LightGray, fontSize = 13.sp, lineHeight = 17.sp,
         maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
     PinnedShortcutRow()
-    if (battery.level >= 0) Row(Modifier.testTag("brief-battery"), verticalAlignment = Alignment.CenterVertically) {
-        BatteryGlyph(battery.level, when {
-            battery.charging -> Tints.Green
-            battery.level <= 15 -> Tints.Red
-            else -> Color.White
-        }, Modifier.size(26.dp, 13.dp).testTag("expanded-brief-battery-icon"))
-        Spacer(Modifier.width(6.dp))
-        Text("${battery.level}%", color = Color.White, fontSize = 14.sp, style = Digits, maxLines = 1, softWrap = false)
+    if (battery.level >= 0 || weather != null) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (battery.level >= 0) Row(Modifier.testTag("brief-battery"), verticalAlignment = Alignment.CenterVertically) {
+            BatteryGlyph(battery.level, when {
+                battery.charging -> Tints.Green
+                battery.level <= 15 -> Tints.Red
+                else -> Color.White
+            }, Modifier.size(26.dp, 13.dp).testTag("expanded-brief-battery-icon"))
+            Spacer(Modifier.width(6.dp))
+            Text("${battery.level}%", color = Color.White, fontSize = 14.sp, style = Digits, maxLines = 1, softWrap = false)
+        }
+        if (weather != null) {
+            Spacer(Modifier.weight(1f))
+            WeatherSymbol(weather, s, 22.dp)
+            Spacer(Modifier.width(3.dp))
+            Text(String.format(Lang.locale, "%.0f°", weather.temperature), color = Color.White, fontSize = 14.sp,
+                style = Digits, maxLines = 1)
+        }
     }
     alarm?.takeIf { it.triggerAt - now in 1..86_400_000L }?.let { next ->
         val alarmTime = wakeTime(context, next.triggerAt)
@@ -217,7 +228,7 @@ private fun ColumnScope.BriefStepsPage(details: BriefDetails) {
 }
 
 @Composable
-private fun ColumnScope.BriefWeatherPage(details: BriefDetails, refresh: () -> Unit) {
+private fun ColumnScope.BriefWeatherPage(s: IslandSettings, details: BriefDetails, refresh: () -> Unit) {
     if (details.weatherStatus != BriefDataStatus.HIDDEN && details.weatherStatus != BriefDataStatus.DISABLED) {
         details.weatherCity?.let { city ->
             Text(city, color = Color.White, fontSize = 14.sp, lineHeight = 18.sp,
@@ -233,8 +244,11 @@ private fun ColumnScope.BriefWeatherPage(details: BriefDetails, refresh: () -> U
             else -> tr("Погода пока недоступна", "Weather is not available yet")
         })
         BriefDataStatus.READY -> details.weather?.let { weather ->
-            FitText(String.format(Lang.locale, "%.0f°C", weather.temperature), Color.White, 38.sp, 12.sp,
-                FontWeight.Normal.island, Modifier.fillMaxWidth(), Digits)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                WeatherSymbol(weather, s)
+                FitText(String.format(Lang.locale, "%.0f°C", weather.temperature), Color.White, 38.sp, 12.sp,
+                    FontWeight.Normal.island, Modifier.weight(1f), Digits)
+            }
             Text(weather.summary(), color = Color.LightGray, fontSize = 13.sp, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (details.weatherError != null) Text(details.weatherError, color = Color.LightGray,
                 fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)

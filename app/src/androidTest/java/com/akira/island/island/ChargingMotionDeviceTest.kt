@@ -40,7 +40,7 @@ class ChargingMotionDeviceTest {
         try {
             compose.runOnUiThread { compose.activity.setContent {
                 Box(Modifier.size(180.dp, 44.dp).testTag("wave").background(Color.Black)
-                    .then(chargingWave(IslandSettings(), 1L, false)))
+                    .then(chargingWave(IslandSettings(), 1L)))
             } }
             fun greenPixels(): Int {
                 val image = compose.onNodeWithTag("wave").captureToImage().toPixelMap()

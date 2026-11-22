@@ -6,6 +6,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class WeatherRepoTest {
+    @Test fun dayAndNightSymbolsFollowTheSelectedCity() {
+        fun parse(day: String) = WeatherRepo.parse(
+            """{"current":{"temperature_2m":12,"weather_code":0$day}}""", "Kyiv", 1L).isDay
+        assertEquals(true, parse(""","is_day":1"""))
+        assertEquals(false, parse(""","is_day":0"""))
+        assertEquals(null, parse(""))
+    }
+
     @Test fun parsesCurrentWeatherWithTimestamp() {
         val result = WeatherRepo.parse("""{"current":{"temperature_2m":-12.5,"weather_code":73}}""", "Astana", 123L)
         assertEquals("Astana", result.city)

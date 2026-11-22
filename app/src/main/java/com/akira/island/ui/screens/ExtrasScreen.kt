@@ -124,11 +124,10 @@ fun ExtrasScreen(onBack: () -> Unit) {
         LaunchedEffect(s.weatherEnabled, s.weatherCity, s.latitude, s.longitude) {
             if (s.weatherEnabled && s.weatherCity.isNotBlank()) WeatherRepo.refresh(force = false)
         }
-        GroupToggle(Pos.Single, Icons.Rounded.Cloud, if (s.briefEnabled) tr("Погода в сводке", "Weather in Brief") else tr("Карточка погоды", "Weather card"),
+        GroupToggle(Pos.Single, Icons.Rounded.Cloud, if (s.briefEnabled) tr("Погода в сводке", "Weather in Brief") else tr("Погода", "Weather"),
             s.weatherCity.ifBlank { tr("Сначала выберите город", "Choose a city first") }, s.weatherEnabled, color = Tile.Teal) {
             ExtrasRepo.update { copy(weatherEnabled = it && weatherCity.isNotBlank()) }
         }
-        if (s.briefEnabled) SettingsHint(tr("Погода появится на странице сводки вместо отдельной карточки острова.", "Weather appears on the Brief page instead of a separate island card."))
         if (s.weatherEnabled && s.weatherCity.isNotBlank()) {
             forecast?.takeIf { it.city == s.weatherCity && System.currentTimeMillis() - it.updatedAt in 0..3_600_000L }?.let { weather ->
                 Text(String.format(java.util.Locale.ROOT, "%.0f°C", weather.temperature) + " · " + weather.summary(), color = Ui.Text)

@@ -37,7 +37,7 @@ Notifications with reply · navigation · payments · music with lyrics · calls
 - 🫧 **Liquid Glass**: refined highlights and transparency, glass density and system blur strength controls. Available for the island, expanded cards and secondary activity on supported devices.
 - 📌 **Pinned apps and contacts**: a compact shortcut row below the date.
 - 🕒 **Brief**: separate compact clock, steps and weather pages, clock styles and extra controls.
-- 🌤 **Weather**: city selection, a standalone card or Brief page, manual refresh and retries after errors.
+- 🌤 **Weather**: the selected city’s weather alongside the expanded clock and controls, with details in Brief and manual refresh.
 - 🎵 **Lyrics**: a continuous soft highlighting wave and smooth line transitions; unsynced lyrics remain scrollable.
 - 🎨 **Custom colors and fonts**: text color, HEX/HSV picker, system or custom fonts, weight and element sizing.
 - 📶 **Hotspot**: persistent state, a settings shortcut and client counts when reliable system information is available.

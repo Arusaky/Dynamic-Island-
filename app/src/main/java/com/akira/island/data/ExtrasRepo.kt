@@ -35,8 +35,7 @@ data class ExtraSettings(
     val briefShowSteps: Boolean = true,
     val briefClockStyle: BriefClockStyle = BriefClockStyle.DIGITAL,
 ) {
-    val hasIdleExtras: Boolean
-        get() = briefEnabled || controls || analogClock || steps || apps.isNotEmpty() || contacts.isNotEmpty()
+    val showWeatherInPanel: Boolean get() = weatherEnabled && weatherCity.isNotBlank()
 }
 
 /** Optional panel preferences are separate from the island layout migration. */

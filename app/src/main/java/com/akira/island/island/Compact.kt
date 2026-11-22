@@ -32,7 +32,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.runtime.DisposableEffect
@@ -213,11 +212,6 @@ private fun CompactContentBody(act: Act, s: IslandSettings, wideWidth: Dp) {
             left = { Icon(Icons.Rounded.WifiTethering, tr("Точка доступа", "Hotspot"), tint = Tints.Blue, modifier = Modifier.size(icon)) },
             right = { Text(act.status.clients?.toString() ?: tr("Вкл", "On"), color = Color.White,
                 fontSize = 17.sp, style = Digits) },
-        )
-
-        is Act.WeatherA -> CompactRow(h, gap, side,
-            left = { Icon(Icons.Rounded.WbSunny, null, tint = Tints.Yellow, modifier = Modifier.size(icon)) },
-            right = { Text("${act.weather.temperature.toInt()}°", color = Color.White, fontSize = 17.sp, style = Digits) },
         )
 
         is Act.MediaA -> MediaCompact(act.m, s)
