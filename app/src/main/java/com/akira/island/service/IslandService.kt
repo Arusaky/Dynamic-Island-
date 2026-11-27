@@ -409,12 +409,22 @@ class IslandService : AccessibilityService() {
                 return super.dispatchKeyEvent(event)
             }
         }
-        drawRoot.setOnApplyWindowInsetsListener { _, insets ->
+        drawRoot.setOnApplyWindowInsetsListener { view, insets ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val cutout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    wm?.maximumWindowMetrics?.windowInsets?.displayCutout ?: insets.displayCutout
-                } else insets.displayCutout
-                cameraDepths.value = listOf(cutout?.safeInsetTop ?: 0, cutout?.safeInsetLeft ?: 0, cutout?.safeInsetRight ?: 0)
+                val fullDisplay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    wm?.maximumWindowMetrics?.windowInsets?.displayCutout
+                } else null
+                val cutout = fullDisplay ?: view.rootWindowInsets?.displayCutout ?: insets.displayCutout
+                if (cutout == null) {
+                    cameraDepths.value = listOf(0, 0, 0)
+                } else {
+                    // Older Android may strip the cutout from the dispatched insets. Root insets
+                    // still report it relative to the overlay window, so restore its screen depth.
+                    val edge = when (IslandBus.contentRotation.value) { -90 -> 1; 90 -> 2; else -> 0 }
+                    val offset = dp(SettingsRepo.current.topOffset - ISLAND_PAD_DP)
+                    cameraDepths.value = listOf(cutout.safeInsetTop, cutout.safeInsetLeft, cutout.safeInsetRight)
+                        .mapIndexed { index, depth -> if (fullDisplay == null && index == edge && depth > 0) depth + offset else depth }
+                }
             }
             insets
         }
