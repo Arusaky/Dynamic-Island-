@@ -19,6 +19,8 @@ import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.sp
 import com.akira.island.island.glassSurface
+import com.akira.island.island.ISLAND_PAD_DP
+import com.akira.island.island.LocalCameraDepth
 import com.akira.island.island.Text
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Box
@@ -108,7 +110,7 @@ fun FaceUnlockCard(phase: FacePhase, reduced: Boolean, modifier: Modifier = Modi
     }
 }
 
-/** Insets identify the physical camera. With no trustworthy anchor, do not invent a position. */
+/** Use the physical camera's insets when available, or the user's calibrated capsule position. */
 @Composable
 fun FaceUnlockLayer(settings: IslandSettings, allowed: Boolean) {
     val phase by FaceUnlockState.phase.collectAsState()
@@ -132,20 +134,32 @@ fun FaceUnlockLayer(settings: IslandSettings, allowed: Boolean) {
     var anchor by remember { mutableStateOf<Offset?>(null) }
     val side = with(density) { 176.dp.toPx() }
     val panelHeight = with(density) { 124.dp.toPx() }
+    val cutoutDepth = LocalCameraDepth.current
     fun locate(c: LayoutCoordinates?) {
-        anchor = if (Build.VERSION.SDK_INT >= 28 && c?.isAttached == true) runCatching {
-            val cutout = view.rootWindowInsets?.displayCutout?.boundingRects?.firstOrNull { !it.isEmpty }
-                ?: return@runCatching null
-            val corners = listOf(Offset(cutout.left.toFloat(),cutout.top.toFloat()),
-                Offset(cutout.right.toFloat(),cutout.top.toFloat()),Offset(cutout.left.toFloat(),cutout.bottom.toFloat()),
-                Offset(cutout.right.toFloat(),cutout.bottom.toFloat())).map(c::windowToLocal)
-            val left=corners.minOf { it.x }; val rightEdge=corners.maxOf { it.x }
-            val x = ((left + rightEdge - side) / 2f).coerceIn(0f, (c.size.width-side).coerceAtLeast(0f))
-            val y = corners.maxOf { it.y } + with(density) { 4.dp.toPx() }
-            Offset(x,y).takeIf { side <= c.size.width && it.y >= 0 && it.y+panelHeight <= c.size.height }
+        if (c == null || !c.isAttached || side > c.size.width) {
+            anchor = null
+            return
+        }
+        val fallbackCenter = c.size.width / 2f + with(density) { settings.offsetX.dp.toPx() }
+        val fallbackTop = with(density) {
+            maxOf((ISLAND_PAD_DP + settings.height).dp.toPx(),
+                cutoutDepth + (ISLAND_PAD_DP - settings.topOffset).dp.toPx())
+        }
+        val actual = if (Build.VERSION.SDK_INT >= 28) runCatching {
+            view.rootWindowInsets?.displayCutout?.boundingRects.orEmpty()
+                .asSequence().filterNot { it.isEmpty }.map { cutout ->
+                    val corners = listOf(Offset(cutout.left.toFloat(), cutout.top.toFloat()),
+                        Offset(cutout.right.toFloat(), cutout.top.toFloat()),
+                        Offset(cutout.left.toFloat(), cutout.bottom.toFloat()),
+                        Offset(cutout.right.toFloat(), cutout.bottom.toFloat())).map(c::windowToLocal)
+                    Offset((corners.minOf { it.x } + corners.maxOf { it.x }) / 2f, corners.maxOf { it.y })
+                }.firstOrNull { it.x in 0f..c.size.width.toFloat() && it.y in 0f..(c.size.height - panelHeight) }
         }.getOrNull() else null
+        val x = ((actual?.x ?: fallbackCenter) - side / 2f).coerceIn(0f, c.size.width - side)
+        val y = maxOf(actual?.y ?: fallbackTop, fallbackTop) + with(density) { 4.dp.toPx() }
+        anchor = Offset(x, y).takeIf { y + panelHeight <= c.size.height }
     }
-    LaunchedEffect(phase, allowed) { if (phase != FacePhase.HIDDEN && allowed) locate(coordinates) }
+    LaunchedEffect(phase, allowed, cutoutDepth, settings.offsetX, settings.topOffset) { if (phase != FacePhase.HIDDEN && allowed) locate(coordinates) }
     Box(Modifier.fillMaxSize().onGloballyPositioned { coordinates=it; locate(it) }) {
         val at=anchor
         if (at != null) {

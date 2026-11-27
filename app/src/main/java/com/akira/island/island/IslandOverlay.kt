@@ -118,7 +118,7 @@ import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
 import com.akira.island.data.shouldTimeOutIdle
 import com.akira.island.data.TapAction
-import com.akira.island.service.CallMonitor
+import com.akira.island.service.selectIslandCall
 import com.akira.island.service.NavScreen
 import com.akira.island.service.Inbox
 import com.akira.island.service.PayMonitor
@@ -232,20 +232,7 @@ fun IslandOverlay(
         .map { NavScreen.merge(it, screenNav[it.pkg]) }
         .let { list -> list + screenNav.values.filter { sn -> sn.distance != null && list.none { it.pkg == sn.pkg } }.map(NavScreen::synthetic) }
 
-    val call = if (!s.cardCall) null else {
-        val tel = calls[CallMonitor.KEY]
-        val fromApp = calls.filterKeys { it != CallMonitor.KEY }.values.maxByOrNull { it.postTime }
-        when {
-            fromApp == null -> tel
-            tel == null -> fromApp
-            // У звонилки богаче карточка (имя, фото, кнопки), а состояние надёжнее у телефона
-            else -> fromApp.copy(
-                incoming = tel.incoming,
-                base = if (!tel.incoming && fromApp.incoming) tel.base else fromApp.base,
-                avatar = fromApp.avatar ?: tel.avatar,
-            )
-        }
-    }
+    val call = if (s.cardCall) selectIslandCall(calls.values) else null
     // Смахнутый входящий не показываем, пока звонит (сбрасывает служба, когда звонить перестали)
     val callHidden by IslandBus.callHidden.collectAsState()
     val acts = buildList {

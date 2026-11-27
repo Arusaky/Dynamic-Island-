@@ -49,11 +49,18 @@ object Controls {
     fun playPause(pkg: String? = null) {
         val controller = mediaController?.takeIf { pkg == null || it.packageName == pkg } ?: return
         runCatching {
-            val state = controller.playbackState?.state
-            val pause = state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
+            val playback = controller.playbackState
+            val pause = playback?.state == PlaybackState.STATE_PLAYING || playback?.state == PlaybackState.STATE_BUFFERING
             val action = if (pause) PlaybackState.ACTION_PAUSE else PlaybackState.ACTION_PLAY
-            val key = if (pause) KeyEvent.KEYCODE_MEDIA_PAUSE else KeyEvent.KEYCODE_MEDIA_PLAY
-            controller.transportOrKey(action, key) { if (pause) pause() else play() }
+            val actions = playback?.actions ?: 0L
+            val key = when {
+                actions and PlaybackState.ACTION_PLAY_PAUSE != 0L -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                pause -> KeyEvent.KEYCODE_MEDIA_PAUSE
+                else -> KeyEvent.KEYCODE_MEDIA_PLAY
+            }
+            if (actions and action != 0L || !controller.dispatchMediaPress(key)) {
+                if (pause) controller.transportControls.pause() else controller.transportControls.play()
+            }
         }
     }
 
@@ -68,18 +75,21 @@ object Controls {
 
     private fun MediaController.transportOrKey(action: Long, key: Int, command: MediaController.TransportControls.() -> Unit) {
         val actions = playbackState?.actions ?: 0L
-        if (actions and action != 0L) {
-            transportControls.command()
-        } else if (dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))) {
-            dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_UP, key))
-        } else {
-            // Some players implement transport commands without advertising action flags.
+        if (actions and action != 0L || !dispatchMediaPress(key)) {
             transportControls.command()
         }
     }
 
-    fun seekTo(ms: Long) {
-        mediaController?.transportControls?.seekTo(ms)
+    private fun MediaController.dispatchMediaPress(key: Int): Boolean {
+        val now = SystemClock.uptimeMillis()
+        val handled = dispatchMediaButtonEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, key, 0))
+        dispatchMediaButtonEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, key, 0))
+        return handled
+    }
+
+    fun seekTo(ms: Long, pkg: String? = null) {
+        val controller = mediaController?.takeIf { pkg == null || it.packageName == pkg } ?: return
+        runCatching { controller.transportControls.seekTo(ms) }
     }
 
     // Таймер
@@ -125,6 +135,10 @@ object Controls {
             if (w.running) StopwatchState(null, w.elapsed(now)) else StopwatchState(now, w.accumulated)
     }
 
+    fun resetStopwatch() {
+        if (IslandBus.stopwatch.value != null) IslandBus.stopwatch.value = StopwatchState(null, 0)
+    }
+
     fun stopStopwatch() {
         IslandBus.stopwatch.value = null
         if (IslandBus.focus.value == "stopwatch") collapse()
@@ -168,7 +182,7 @@ object Controls {
         }.isSuccess
     }
 
-    // Звонки: сначала кнопка из уведомления звонилки, иначе системный сервис звонков
+    // The notification action identifies the exact call. Telecom is the fallback for a carrier call.
 
     @Suppress("DEPRECATION", "MissingPermission")
     fun answerCall(context: Context, call: CallInfo) {
@@ -176,14 +190,14 @@ object Controls {
             IslandBus.calls.value = IslandBus.calls.value + (TEST_CALL to call.copy(incoming = false, base = System.currentTimeMillis()))
             return
         }
-        if (send(context, call.answer)) return
-        // A VoIP notification must never answer an unrelated cellular call.
-        if (call.key != CallMonitor.KEY && call.pkg != runCatching { context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage }.getOrNull()) {
-            if (!send(context, call.open)) openApp(context, call.pkg)
-            return
+        if (!call.incoming || send(context, call.answer)) return
+        val telecom = context.getSystemService(TelecomManager::class.java)
+        // A notification-only call must never answer a different ringing call on the device.
+        if (call.key == CallMonitor.KEY && telecom != null) {
+            if (runCatching { telecom.acceptRingingCall() }.isFailure) showCallScreen(context, call)
+        } else if (!send(context, call.open)) {
+            openApp(context, call.pkg)
         }
-        val ok = runCatching { context.getSystemService(TelecomManager::class.java)!!.acceptRingingCall() }.isSuccess
-        if (!ok) showCallScreen(context, call)
     }
 
     @Suppress("DEPRECATION", "MissingPermission")

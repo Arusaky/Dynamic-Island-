@@ -159,7 +159,18 @@ fun noticeHeight(s: IslandSettings): Dp = (s.height.dp * 1.68f).coerceAtLeast(56
 fun callHeight(s: IslandSettings): Dp = (s.height.dp * 2.27f).coerceAtLeast(76.dp)
 
 /** Ниже этой линии камера уже не мешает тексту — сюда ставится содержимое раскрытых карточек. */
-fun cameraInset(s: IslandSettings): Dp = s.height.dp * 0.5f + 11.5.dp
+internal val LocalCameraDepth = androidx.compose.runtime.staticCompositionLocalOf { 0 }
+
+@Composable
+fun cameraInset(s: IslandSettings): Dp {
+    val depth = with(LocalDensity.current) { LocalCameraDepth.current.toDp() }
+    return cameraContentInset(s.height.dp, s.topOffset.dp, depth)
+}
+
+internal fun cameraContentInset(height: Dp, top: Dp, depth: Dp): Dp {
+    val normal = height * 0.5f + 11.5.dp
+    return if (depth > 0.dp) maxOf(normal, depth - top + 4.dp) else normal
+}
 
 @Composable
 fun CompactContent(act: Act, s: IslandSettings, wideWidth: Dp) {

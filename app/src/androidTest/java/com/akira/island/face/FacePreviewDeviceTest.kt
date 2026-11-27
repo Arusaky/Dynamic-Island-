@@ -39,6 +39,32 @@ class FacePreviewDeviceTest {
         val path=File(compose.activity.getExternalFilesDir(null),"face-phases.png")
         path.outputStream().use { image.compress(Bitmap.CompressFormat.PNG,100,it) }
     }
+    @Test fun confirmedFaceCanRenderInAWindowWithoutAnExposedCameraCutout() {
+        val oldPhase = FaceUnlockState.phase.value
+        val oldScreen = IslandBus.screenOn.value
+        val oldSchedule = IslandBus.offSchedule.value
+        try {
+            compose.runOnUiThread {
+                IslandBus.screenOn.value = true
+                IslandBus.offSchedule.value = false
+                FaceUnlockState.phase.value = FacePhase.SUCCESS
+                compose.activity.setContent {
+                    Box(Modifier.size(320.dp, 240.dp)) {
+                        FaceUnlockLayer(com.akira.island.data.IslandSettings(faceUnlockOnly = true, reduceEffects = true),
+                            allowed = true)
+                    }
+                }
+            }
+            compose.onNodeWithText("Face ID").assertIsDisplayed()
+        } finally {
+            compose.runOnUiThread {
+                FaceUnlockState.phase.value = oldPhase
+                IslandBus.screenOn.value = oldScreen
+                IslandBus.offSchedule.value = oldSchedule
+            }
+        }
+    }
+
     @Test fun previewIsLocalAndNeverPublishesAnAuthenticationOrNotice() {
         val phase=FaceUnlockState.phase.value
         val notice=IslandBus.notice.value

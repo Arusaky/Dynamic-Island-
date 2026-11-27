@@ -20,6 +20,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -331,7 +333,7 @@ private fun MediaSeek(m: MediaInfo, clock: State<Long>) {
             fraction = { if (m.durationMs > 0) m.positionAt(clock.value).toFloat() / m.durationMs else 0f },
             color = Color.White,
             enabled = m.canSeek && m.durationMs > 0,
-            onSeek = { f -> Controls.seekTo((f * m.durationMs).toLong()) },
+            onSeek = { f -> Controls.seekTo((f * m.durationMs).toLong(), m.pkg) },
             modifier = Modifier.weight(1f),
         )
         Text(
@@ -542,25 +544,47 @@ private fun TimerExpanded(t: TimerState, s: IslandSettings) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StopwatchExpanded(w: StopwatchState) {
     val now = rememberNow(100, active = w.running)
     val elapsed = w.elapsed(now)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        RoundButton(if (w.running) Ios.pause else Ios.play, size = 50.dp,
-            bg = Tints.Orange.copy(alpha = 0.25f), fg = Tints.Orange, iconScale = 0.5f) { Controls.toggleStopwatch() }
-        Spacer(Modifier.width(12.dp))
-        if (w.running) {
-            RoundButton(Ios.close, size = 50.dp, bg = Color.White.copy(alpha = 0.2f), iconScale = 0.44f) { Controls.stopStopwatch() }
-        } else {
-            RoundButton(Ios.refresh, size = 50.dp, bg = Color.White.copy(alpha = 0.2f), iconScale = 0.46f) {
-                Controls.startStopwatch()
-                Controls.toggleStopwatch()
-            }
+    val close: @Composable () -> Unit = {
+        RoundButton(Ios.close, modifier = Modifier.semantics { contentDescription = tr("Закрыть", "Close") }) {
+            Controls.stopStopwatch()
         }
-        Spacer(Modifier.weight(1f))
-        Text(formatDuration(elapsed) + ",%d".format((elapsed % 1000) / 100), color = Tints.Orange, fontSize = 40.sp,
-            style = Digits.copy(fontWeight = FontWeight.Normal.island), maxLines = 1)
+    }
+    val buttons: @Composable (Modifier, Boolean) -> Unit = { modifier, closeFirst ->
+        FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (closeFirst) close()
+            RoundButton(if (w.running) Ios.pause else Ios.play,
+                modifier = Modifier.semantics { contentDescription = if (w.running) tr("Пауза", "Pause") else tr("Продолжить", "Resume") },
+                bg = Tints.Orange.copy(alpha = 0.25f), fg = Tints.Orange) { Controls.toggleStopwatch() }
+            if (!w.running) RoundButton(Ios.refresh,
+                modifier = Modifier.semantics { contentDescription = tr("Сбросить", "Reset") }) {
+                Controls.resetStopwatch()
+            }
+            if (!closeFirst) close()
+        }
+    }
+    val readout: @Composable (Modifier) -> Unit = { modifier ->
+        FitText(formatDuration(elapsed) + ",%d".format((elapsed % 1000) / 100), Tints.Orange,
+            40.sp, 18.sp, FontWeight.Normal.island, modifier, Digits)
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth < 270.dp || LocalDensity.current.fontScale > 1.2f) {
+            val wraps = maxWidth < 148.dp
+            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                if (!wraps) readout(Modifier)
+                buttons(Modifier.fillMaxWidth(), wraps)
+                if (wraps) readout(Modifier)
+            }
+        } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            buttons(Modifier, false)
+            readout(Modifier.weight(1f))
+        }
     }
 }
 

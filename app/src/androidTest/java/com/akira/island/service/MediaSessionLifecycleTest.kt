@@ -73,6 +73,59 @@ class MediaSessionLifecycleTest {
         }
     }
 
+    @Test fun toggleOnlySessionReceivesAPlayPauseMediaButton() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val session = MediaSession(context, "toggle-only-regression")
+        val previous = Controls.mediaController
+        val pressed = java.util.concurrent.CountDownLatch(1)
+        try {
+            instrumentation.runOnMainSync {
+                session.setCallback(object : MediaSession.Callback() {
+                    override fun onPause() { pressed.countDown() }
+                })
+                session.setPlaybackState(PlaybackState.Builder().setActions(PlaybackState.ACTION_PLAY_PAUSE)
+                    .setState(PlaybackState.STATE_PLAYING, 0, 1f).build())
+                session.isActive = true
+                Controls.mediaController = android.media.session.MediaController(context, session.sessionToken)
+                Controls.playPause(context.packageName)
+            }
+            assertTrue("A toggle-only player should receive a pause request",
+                pressed.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        } finally {
+            instrumentation.runOnMainSync { Controls.mediaController = previous; session.release() }
+        }
+    }
+
+    @Test fun keyOnlySessionWithoutActionFlagsReceivesTheNextTrackButton() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val session = MediaSession(context, "key-only-regression")
+        val previous = Controls.mediaController
+        val pressed = java.util.concurrent.CountDownLatch(1)
+        try {
+            instrumentation.runOnMainSync {
+                session.setCallback(object : MediaSession.Callback() {
+                    override fun onMediaButtonEvent(intent: android.content.Intent): Boolean {
+                        val key = androidx.core.content.IntentCompat.getParcelableExtra(
+                            intent, android.content.Intent.EXTRA_KEY_EVENT, android.view.KeyEvent::class.java)
+                        if (key?.keyCode == android.view.KeyEvent.KEYCODE_MEDIA_NEXT &&
+                            key.action == android.view.KeyEvent.ACTION_DOWN) pressed.countDown()
+                        return true
+                    }
+                })
+                session.setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build())
+                session.isActive = true
+                Controls.mediaController = android.media.session.MediaController(context, session.sessionToken)
+                Controls.next(context.packageName)
+            }
+            assertTrue("A key-only player should receive next track",
+                pressed.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        } finally {
+            instrumentation.runOnMainSync { Controls.mediaController = previous; session.release() }
+        }
+    }
+
     @Test fun progressNotificationsReuseTheSessionAndDoNotLoseCallbacks() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

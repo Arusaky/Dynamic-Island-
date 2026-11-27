@@ -31,6 +31,7 @@ import android.view.accessibility.AccessibilityWindowInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.geometry.Rect
@@ -51,6 +52,7 @@ import com.akira.island.data.LockScreenMode
 import com.akira.island.data.SettingsRepo
 import com.akira.island.island.Egg
 import com.akira.island.island.ISLAND_PAD_DP
+import com.akira.island.island.LocalCameraDepth
 import com.akira.island.island.IslandOverlay
 import com.akira.island.island.IslandTheme
 import com.akira.island.island.IslandType
@@ -66,6 +68,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -88,6 +91,7 @@ class IslandService : AccessibilityService() {
     private var wm: WindowManager? = null
     private var display: FrameLayout? = null
     private var touch: TouchRoot? = null
+    private val cameraDepths = MutableStateFlow(listOf(0, 0, 0))
     private var networkRateMonitor: NetworkRateMonitor? = null
     private var backdrop: IslandBackdropBlur? = null
     private var bubbleBackdrop: IslandBackdropBlur? = null
@@ -288,6 +292,10 @@ class IslandService : AccessibilityService() {
                     scrollToTop?.cancel()
                     keyguardShown = true
                     PayMonitor.clearReady()
+                    payReader?.pauseScan()
+                    setScreenEvents(false)
+                } else {
+                    checkUnlock()
                 }
             }
         }
@@ -366,22 +374,26 @@ class IslandService : AccessibilityService() {
                     LangScope {
                         // «У камеры» в альбомной ориентации: остров повёрнут к краю с камерой, как будто экран не поворачивали
                         val rotation by IslandBus.contentRotation.collectAsState()
+                        val depths by cameraDepths.collectAsState()
+                        val depth = depths[when { rotation < 0 -> 1; rotation > 0 -> 2; else -> 0 }]
                         Rotated(rotation) {
-                            IslandOverlay(
-                                // До целых пикселей: доли пикселя в конце пружины не двигают окна
-                                onBodyBounds = { r -> val q = r.snapped(); if (q != body) { body = q; onBoundsChanged() } },
-                                onBubbleBounds = { r -> val q = r.snapped(); if (q != bubble) { bubble = q; onBoundsChanged() } },
-                                onBackdropSampler = { sampler ->
-                                    backdropSampler = sampler
-                                    if (sampler == null) { backdropGeometry = null; scheduleBackdrop() }
-                                },
-                                onBackdropShape = { geometry ->
-                                    if (backdropGeometry != geometry) {
-                                        backdropGeometry = geometry
-                                        scheduleBackdrop()
-                                    }
-                                },
-                            )
+                            CompositionLocalProvider(LocalCameraDepth provides depth) {
+                                IslandOverlay(
+                                    // До целых пикселей: доли пикселя в конце пружины не двигают окна
+                                    onBodyBounds = { r -> val q = r.snapped(); if (q != body) { body = q; onBoundsChanged() } },
+                                    onBubbleBounds = { r -> val q = r.snapped(); if (q != bubble) { bubble = q; onBoundsChanged() } },
+                                    onBackdropSampler = { sampler ->
+                                        backdropSampler = sampler
+                                        if (sampler == null) { backdropGeometry = null; scheduleBackdrop() }
+                                    },
+                                    onBackdropShape = { geometry ->
+                                        if (backdropGeometry != geometry) {
+                                            backdropGeometry = geometry
+                                            scheduleBackdrop()
+                                        }
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -396,6 +408,15 @@ class IslandService : AccessibilityService() {
                 }
                 return super.dispatchKeyEvent(event)
             }
+        }
+        drawRoot.setOnApplyWindowInsetsListener { _, insets ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val cutout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    wm?.maximumWindowMetrics?.windowInsets?.displayCutout ?: insets.displayCutout
+                } else insets.displayCutout
+                cameraDepths.value = listOf(cutout?.safeInsetTop ?: 0, cutout?.safeInsetLeft ?: 0, cutout?.safeInsetRight ?: 0)
+            }
+            insets
         }
         drawRoot.addView(compose)
         drawRoot.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> scheduleTouchWindow() }
@@ -519,9 +540,9 @@ class IslandService : AccessibilityService() {
         display?.visibility = if (visible) View.VISIBLE else View.GONE
         // Остров спрятан — выключен, вне расписания, на экране блокировки или в повороте (скажем, смотрят видео):
         // Compose в его окне не рисует и не просыпается ради анимаций и эквалайзера, пока остров снова не покажется.
-        // С погашенным экраном так не делаем: включили экран — остров сразу показывает то, что есть сейчас,
-        // а украшения и без того ждут экрана
-        owner.setActive(visible)
+        // An optional AOD capsule stays in place, but never drives animation frames.
+        owner.setActive(visible && IslandBus.screenOn.value)
+        refreshScreenEvents()
         refreshTilt()
         if (!visible) Controls.collapse()
         if (placeDisplayWindow(s, turn)) display?.let { v -> runCatching { wm?.updateViewLayout(v, displayParams) } }
@@ -611,7 +632,7 @@ class IslandService : AccessibilityService() {
         val right = origin[0] + ceil(area.right).toInt()
         val bottom = origin[1] + ceil(area.bottom).toInt()
         val top = maxOf(origin[1] + floor(area.top).toInt(), dp(STATUS_BAR_SWIPE_DP))
-        val usable = visible && !area.isEmpty && bottom > top && right > left
+        val usable = visible && IslandBus.screenOn.value && !area.isEmpty && bottom > top && right > left
         val x = if (usable) left else -10
         val y = if (usable) top else -10
         val w = if (usable) right - left else 1
@@ -706,6 +727,7 @@ class IslandService : AccessibilityService() {
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (!IslandBus.screenOn.value) return
         scrollToTop?.onAccessibilityEvent(event)
         when (event?.eventType) {
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> onWindowsChanged()
@@ -723,6 +745,10 @@ class IslandService : AccessibilityService() {
      * появляется сразу, а «Оплачено» — как только кошелёк показал сумму. В остальное время эти события
      * выключены: их много, а остров они не касаются.
      */
+    private fun refreshScreenEvents() {
+        setScreenEvents(visible && IslandBus.screenOn.value && (clockReader?.active == true || payReader?.active == true))
+    }
+
     private fun setScreenEvents(on: Boolean) {
         if (on == screenEvents) return
         screenEvents = on
@@ -737,7 +763,8 @@ class IslandService : AccessibilityService() {
      * generic full-screen system window for the shade; OEMs without exposed panel IDs stay unchanged.
      */
     private fun updateShadeState() {
-        if (keyguard?.isKeyguardLocked == true) {
+        val s = SettingsRepo.current
+        if ((!s.collapseOnShade && !s.faceUnlockOnly) || keyguard?.isKeyguardLocked == true) {
             IslandBus.shadeOpen.value = false
             return
         }
@@ -810,7 +837,7 @@ class IslandService : AccessibilityService() {
         // Окно оплаты из сервисов Google (поднесли телефон к терминалу) — не «открытое приложение»
         if (pkg == PayMonitor.GMS && PayScreenParser.isGooglePaymentCandidate(cls)) {
             payReader?.onTapAndPay()
-            setScreenEvents(clockReader?.active == true || payReader?.active == true)
+            refreshScreenEvents()
             return
         }
         if (pkg == packageName && !cls.endsWith("Activity")) return
@@ -823,7 +850,7 @@ class IslandService : AccessibilityService() {
         clockReader?.onForeground(pkg)
         // Открыт кошелёк или банк — смотрим, когда он покажет сумму оплаты
         payReader?.onForeground(pkg, cls)
-        setScreenEvents(clockReader?.active == true || payReader?.active == true)
+        refreshScreenEvents()
         IslandBus.foregroundPackage.value = pkg
     }
 

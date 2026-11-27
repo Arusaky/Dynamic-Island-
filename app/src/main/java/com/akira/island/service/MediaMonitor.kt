@@ -59,6 +59,14 @@ class MediaMonitor(private val context: Context) {
     /** Отпечаток последней обложки (см. [artPrint]); null — обложки нет */
     private var lastArt: Long? = null
     private var artJob: Job? = null
+    private var artKey: String? = null
+    private var pendingArt: Long? = null
+    private var missingMetadataJob: Job? = null
+    private var notificationRefreshPending = false
+    private val notificationRefresh = Runnable {
+        notificationRefreshPending = false
+        if (IslandBus.screenOn.value) refresh()
+    }
     private var lyricsJob: Job? = null
     private var hideJob: Job? = null
     private var hiddenKey: String? = null
@@ -85,6 +93,8 @@ class MediaMonitor(private val context: Context) {
                     rescan()
                     val m = IslandBus.media.value
                     if (m != null && SettingsRepo.current.lyricsEnabled && lyricsJob?.isActive != true && IslandBus.lyrics.value?.synced != true) loadLyrics(m)
+                } else {
+                    artJob?.cancel()
                 }
             }
         }
@@ -93,6 +103,12 @@ class MediaMonitor(private val context: Context) {
             SettingsRepo.state.map { it.lyricsEnabled }.distinctUntilChanged().collect { enabled ->
                 val m = IslandBus.media.value
                 if (m != null && (enabled && IslandBus.lyrics.value?.key != m.key || !enabled)) loadLyrics(m)
+            }
+        }
+        scope.launch {
+            SettingsRepo.state.map { it.cardMedia }.distinctUntilChanged().collect { enabled ->
+                if (enabled && IslandBus.screenOn.value) refresh()
+                else artJob?.cancel()
             }
         }
         // Some recorders expose a MediaSession while capturing. Their confirmed recording belongs
@@ -105,6 +121,8 @@ class MediaMonitor(private val context: Context) {
 
     fun stop() {
         started = false
+        handler.removeCallbacks(notificationRefresh)
+        notificationRefreshPending = false
         notificationSessions.clear()
         runCatching { manager?.removeOnActiveSessionsChangedListener(sessionsListener) }
         unbindAll()
@@ -123,7 +141,11 @@ class MediaMonitor(private val context: Context) {
             if (notificationSessions[sbn.key]?.sessionToken == token) {
                 // Some players update progress/artwork notifications every second. Reuse the
                 // controller and callbacks; a refresh also covers players that miss callbacks.
-                if (bound.any { it.first.sessionToken == token }) refresh() else rescan()
+                if (bound.none { it.first.sessionToken == token }) rescan()
+                else if (IslandBus.screenOn.value && !notificationRefreshPending) {
+                    notificationRefreshPending = true
+                    handler.postDelayed(notificationRefresh, MEDIA_NOTIFICATION_REFRESH_MS)
+                }
                 return
             }
             runCatching { MediaController(context, token) }.getOrNull()?.let { notificationSessions[sbn.key] = it }
@@ -177,7 +199,7 @@ class MediaMonitor(private val context: Context) {
         return st == PlaybackState.STATE_PLAYING || st == PlaybackState.STATE_BUFFERING
     }
 
-    private fun refresh() {
+    private fun refresh(metadataGraceExpired: Boolean = false) {
         val recordingPackages = IslandBus.chrono.value.values.asSequence().filter { it.isRecording }.map { it.pkg }.toSet()
         val controllers = bound.map { it.first }.filterNot { it.packageName in recordingPackages }
         val previous = current?.let { cur -> controllers.firstOrNull { it.sessionToken == cur.sessionToken } }
@@ -185,6 +207,7 @@ class MediaMonitor(private val context: Context) {
             ?: controllers.firstOrNull { isPlaying(it) }
             ?: previous
             ?: controllers.firstOrNull { it.metadata != null }
+        val sameSession = chosen != null && current?.sessionToken == chosen.sessionToken
         current = chosen
         Controls.mediaController = chosen
 
@@ -192,9 +215,17 @@ class MediaMonitor(private val context: Context) {
         val title = meta?.getString(MediaMetadata.METADATA_KEY_TITLE)
             ?: meta?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
         if (chosen == null || meta == null || title.isNullOrBlank()) {
+            if (!metadataGraceExpired && sameSession && IslandBus.media.value != null) {
+                if (missingMetadataJob?.isActive != true) missingMetadataJob = scope.launch {
+                    delay(TRACK_METADATA_GRACE_MS)
+                    refresh(metadataGraceExpired = true)
+                }
+                return
+            }
             publish(null)
             return
         }
+        missingMetadataJob?.cancel()
 
         val artist = meta.getString(MediaMetadata.METADATA_KEY_ARTIST)
             ?: meta.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
@@ -207,7 +238,13 @@ class MediaMonitor(private val context: Context) {
         val mediaId = meta.getString(MediaMetadata.METADATA_KEY_MEDIA_ID).orEmpty()
         val key = "${chosen.packageName}|$mediaId|$title|$artist|${album.orEmpty()}|$duration"
         val prev = IslandBus.media.value
-        val sameTrack = prev?.key == key
+        if (!sameSession) {
+            artJob?.cancel()
+            artKey = null
+            lastArt = null
+            hiddenKey = null
+            hideJob?.cancel()
+        }
 
         val (like, dislike) = rates(state)
         val info = MediaInfo(
@@ -216,8 +253,8 @@ class MediaMonitor(private val context: Context) {
             title = title,
             artist = artist,
             album = album,
-            art = if (sameTrack) prev?.art else null,
-            accent = if (sameTrack && prev != null) prev.accent else Tints.Lavender,
+            art = if (sameSession) prev?.art else null,
+            accent = if (sameSession) prev?.accent ?: Tints.Lavender else Tints.Lavender,
             durationMs = duration,
             positionMs = state?.position ?: 0,
             positionTime = state?.lastPositionUpdateTime?.takeIf { it in 1..SystemClock.elapsedRealtime() } ?: SystemClock.elapsedRealtime(),
@@ -254,16 +291,18 @@ class MediaMonitor(private val context: Context) {
         }
 
         publish(info)
-        val art = runCatching {
-            meta.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-                ?: meta.getBitmap(MediaMetadata.METADATA_KEY_ART)
-                ?: meta.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
-        }.getOrNull()
-        // Плеер при каждой паузе и перемотке отдаёт обложку новым объектом, хотя картинка та же, — её не пересчитываем.
-        // Сравниваем не по размеру, а по самой картинке: обложки треков обычно одного размера, а при смене трека
-        // плеер часто сперва присылает новое название со старой обложкой и только следом — новую обложку
-        val print = art?.let(::artPrint)
-        if (!sameTrack || print != lastArt) loadArt(key, art, print)
+        if (IslandBus.screenOn.value && SettingsRepo.current.cardMedia) {
+            val art = runCatching {
+                meta.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                    ?: meta.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                    ?: meta.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+            }.getOrNull()
+            val print = art?.let(::artPrint)
+            val alreadyShown = print != null && print == lastArt && info.art != null
+            val workInProgress = artJob?.isActive == true && artKey == key && pendingArt == print
+            if (alreadyShown) artJob?.cancel()
+            else if (!workInProgress && (art != null || info.art != null)) loadArt(info, art, print)
+        }
         // Текст ищем один раз на трек, а не после каждого скрытия карточки на паузе
         if (key != lyricsKey) loadLyrics(info)
     }
@@ -289,7 +328,9 @@ class MediaMonitor(private val context: Context) {
         IslandBus.media.value = info
         if (info == null) {
             lastArt = null
+            artKey = null
             artJob?.cancel()
+            missingMetadataJob?.cancel()
             hideJob?.cancel()
             lyricsJob?.cancel()
             lyricsKey = null
@@ -299,11 +340,20 @@ class MediaMonitor(private val context: Context) {
         }
     }
 
-    private fun loadArt(key: String, art: Bitmap?, print: Long?) {
-        lastArt = print
+    private fun loadArt(info: MediaInfo, art: Bitmap?, print: Long?) {
+        artKey = info.key
+        pendingArt = print
         artJob?.cancel()
-        if (art == null) return
         artJob = scope.launch {
+            if (art == null) {
+                delay(TRACK_METADATA_GRACE_MS)
+                val current = IslandBus.media.value
+                if (current?.key == info.key && IslandBus.screenOn.value && SettingsRepo.current.cardMedia) {
+                    lastArt = null
+                    IslandBus.media.value = current.copy(art = null, accent = Tints.Lavender)
+                }
+                return@launch
+            }
             val result = try {
                 withContext(Dispatchers.Default) {
                     if (art.isRecycled) return@withContext null
@@ -324,7 +374,10 @@ class MediaMonitor(private val context: Context) {
                 null
             }
             val m = IslandBus.media.value
-            if (m?.key == key && result != null) IslandBus.media.value = m.copy(art = result.first, accent = result.second)
+            if (m?.key == info.key && IslandBus.screenOn.value && SettingsRepo.current.cardMedia) {
+                lastArt = result?.let { print }
+                IslandBus.media.value = m.copy(art = result?.first, accent = result?.second ?: Tints.Lavender)
+            }
         }
     }
 
@@ -379,6 +432,8 @@ class MediaMonitor(private val context: Context) {
 
     private companion object {
         const val PAUSE_KEEP_MS = 45_000L
+        const val TRACK_METADATA_GRACE_MS = 400L
+        const val MEDIA_NOTIFICATION_REFRESH_MS = 240L
         val DislikeWords = Regex("dislike|не нрав|thumbs?.?down|ban|block")
         val LikeWords = Regex("like|нрав|favou?rite|heart|thumbs?.?up|любим|избран")
         val UndoWords = Regex("unlike|un_like|undo|remove|убрать|удалить|отмен")

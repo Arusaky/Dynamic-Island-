@@ -315,7 +315,7 @@ class SystemEvents(private val context: Context) {
 
             Intent.ACTION_SCREEN_ON -> {
                 // Read sticky state before drawing; ACTION_BATTERY_CHANGED can be delayed through doze.
-                refreshBattery()
+                refreshBattery(interactive = true)
                 IslandBus.screenOn.value = true
                 scheduleBatterySample()
                 IslandBus.locked.value = isLocked()
@@ -480,21 +480,24 @@ class SystemEvents(private val context: Context) {
         if (active && IslandBus.screenOn.value && IslandBus.battery.value.charging) main.postDelayed(batterySample, 15_000)
     }
 
-    private fun refreshBattery() {
-        runCatching { context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }.getOrNull()?.let(::onBattery)
+    private fun refreshBattery(interactive: Boolean = IslandBus.screenOn.value) {
+        runCatching { context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }
+            .getOrNull()?.let { onBattery(it, interactive) }
     }
 
-    private fun onBattery(intent: Intent) {
+    private fun onBattery(intent: Intent, interactive: Boolean = IslandBus.screenOn.value) {
         val level = BatteryReadings.percent(intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1), intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100))
         val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
         val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
         val charging = plugged != 0 &&
             (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
-        val current = BatteryReadings.currentMa(runCatching {
-            batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) ?: Int.MIN_VALUE
-        }.getOrDefault(Int.MIN_VALUE), charging)
+        val current = if (interactive && charging) {
+            BatteryReadings.currentMa(runCatching {
+                batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) ?: Int.MIN_VALUE
+            }.getOrDefault(Int.MIN_VALUE), charging = true)
+        } else null
         val voltage = BatteryReadings.voltageV(intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1))
-        val remaining = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && charging && level < 100) {
+        val remaining = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && interactive && charging && level < 100) {
             BatteryReadings.remainingMs(runCatching { batteryManager?.computeChargeTimeRemaining() ?: -1L }.getOrDefault(-1L), charging)
         } else null
         val fallback = if (s.adaptiveChargeEta) chargeEta.observe(SystemClock.elapsedRealtime(), level,

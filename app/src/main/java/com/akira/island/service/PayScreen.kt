@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.akira.island.core.IslandBus
 import com.akira.island.core.tr
 import com.akira.island.core.trf
 import com.akira.island.data.SettingsRepo
@@ -160,10 +161,14 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
         schedule(if (readyAt != 0L) 150 else 400)
     }
 
-    fun stop() {
+    fun pauseScan() {
         scanJob?.cancel()
-        stopJob?.cancel()
         scanJob = null
+    }
+
+    fun stop() {
+        pauseScan()
+        stopJob?.cancel()
         current = null
         baseline = null
     }
@@ -194,7 +199,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
     }
 
     private fun schedule(wait: Long) {
-        if (scanJob?.isActive == true) return
+        if (!IslandBus.screenOn.value || scanJob?.isActive == true) return
         // Не чаще раза в 0,4 с, пока ждём экран оплаты, — банк листают долго, а батарею жалко
         val gap = if (readyAt != 0L) 0L else (400 - (SystemClock.elapsedRealtime() - lastScan)).coerceAtLeast(0)
         scanJob = scope.launch {
@@ -204,6 +209,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
     }
 
     private fun scan() {
+        if (!IslandBus.screenOn.value) return
         val pkg = current ?: return
         val now = SystemClock.elapsedRealtime()
         lastScan = now
@@ -214,7 +220,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
         }
         val root = rootFor(pkg) ?: return
         val texts = LinkedHashSet<String>()
-        collect(root, texts, 0)
+        collect(root, texts)
         if (done) {
             // A second payment in the same wallet must not require closing/reopening the app.
             if (texts.any { PayScreenParser.ready(it) } && texts.none { PayScreenParser.paid(it) || PayScreenParser.failure(it) }) {
@@ -291,15 +297,19 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
         service.rootInActiveWindow?.takeIf { it.packageName?.toString() == pkg }
             ?: runCatching { service.windows.firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() == pkg } } }.getOrNull()
 
-    private fun collect(node: AccessibilityNodeInfo, out: MutableSet<String>, depth: Int) {
-        if (depth > 30 || out.size > 300) return
-        if (node.isVisibleToUser) {
-            node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() && it.length < 200 }?.let { out += it }
-            node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() && it.length < 200 }?.let { out += it }
-        }
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            collect(child, out, depth + 1)
+    private fun collect(root: AccessibilityNodeInfo, out: MutableSet<String>) {
+        val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
+        pending.add(root)
+        var visited = 0
+        while (pending.isNotEmpty() && visited++ < 512 && out.size < 300) {
+            val node = pending.removeFirst()
+            if (node.isVisibleToUser) {
+                node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() && it.length < 200 }?.let { out += it }
+                node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() && it.length < 200 }?.let { out += it }
+            }
+            for (i in 0 until minOf(node.childCount, 512 - visited - pending.size)) {
+                node.getChild(i)?.let(pending::addLast)
+            }
         }
     }
 

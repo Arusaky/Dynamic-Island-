@@ -123,3 +123,24 @@ class CallMonitor(private val context: Context, private val scope: CoroutineScop
         const val KEY = "telephony"
     }
 }
+
+/** Carrier state only enriches a notification from its own dialer. */
+internal fun selectIslandCall(calls: Collection<CallInfo>): CallInfo? {
+    val carrier = calls.firstOrNull { it.key == CallMonitor.KEY }
+    val dialer = carrier?.let { phone ->
+        calls.filter { it.key != phone.key && it.pkg.isNotEmpty() && it.pkg == phone.pkg && it.incoming == phone.incoming }
+            .maxByOrNull { it.postTime }
+    }
+    val enriched = carrier?.let { phone ->
+        dialer?.copy(
+            key = phone.key,
+            avatar = dialer.avatar ?: phone.avatar,
+        ) ?: phone
+    }
+    val otherCalls = calls.filter { call ->
+        val answeredCarrierNotice = carrier != null && !carrier.incoming && call.incoming &&
+            carrier.pkg.isNotEmpty() && call.pkg == carrier.pkg && call.postTime <= carrier.base
+        call.key != CallMonitor.KEY && call !== dialer && !answeredCarrierNotice
+    }
+    return (otherCalls + listOfNotNull(enriched)).maxWithOrNull(compareBy<CallInfo> { it.incoming }.thenBy { it.postTime })
+}

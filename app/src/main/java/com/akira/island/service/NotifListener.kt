@@ -307,8 +307,12 @@ object NotificationParser {
             }
         }
         // Идёт разговор: системный отсчёт или постоянное уведомление с кнопкой «Завершить» и без «Ответить»
-        val ongoing = ticking || (n.flags and Notification.FLAG_ONGOING_EVENT != 0 && hangUp != null && answer == null)
-        val incoming = !ongoing && answer != null
+        val callType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) ex.getInt(Notification.EXTRA_CALL_TYPE) else 0
+        val explicitlyIncoming = callType == Notification.CallStyle.CALL_TYPE_INCOMING ||
+            callType == Notification.CallStyle.CALL_TYPE_SCREENING
+        val ongoing = !explicitlyIncoming && (callType == Notification.CallStyle.CALL_TYPE_ONGOING || ticking ||
+            (n.flags and Notification.FLAG_ONGOING_EVENT != 0 && hangUp != null && answer == null))
+        val incoming = explicitlyIncoming || (!ongoing && answer != null)
         if (!incoming && !ongoing) return null
 
         val (name, personIcon) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -481,7 +485,7 @@ object LiveApps {
  * Латинской Америке и не только — без них ответить и сбросить из острова там не получалось.
  */
 private val AnswerWords = listOf(
-    "ответ", "принять", "жауап", "қабылдау", "answer", "accept", "trả lời", "nghe", "jawab", "terima", "angkat", "contestar", "responder",
+    "ответ", "принять", "жауап", "қабылдау", "answer", "accept", "pick up", "trả lời", "nghe", "jawab", "terima", "angkat", "contestar", "responder",
     "atender", "aceptar", "aceitar", "รับสาย", "cevapla", "yanıtla", "kabul", "annehmen", "répondre", "rispondi", "accetta",
     "odbierz", "відповісти", "прийняти", "sagutin", "接听", "接聽", "応答", "응답", "받기",
 )
