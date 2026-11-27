@@ -220,7 +220,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
         }
         val root = rootFor(pkg) ?: return
         val texts = LinkedHashSet<String>()
-        collect(root, texts)
+        if (!collect(root, texts)) return
         if (done) {
             // A second payment in the same wallet must not require closing/reopening the app.
             if (texts.any { PayScreenParser.ready(it) } && texts.none { PayScreenParser.paid(it) || PayScreenParser.failure(it) }) {
@@ -297,7 +297,7 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
         service.rootInActiveWindow?.takeIf { it.packageName?.toString() == pkg }
             ?: runCatching { service.windows.firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() == pkg } } }.getOrNull()
 
-    private fun collect(root: AccessibilityNodeInfo, out: MutableSet<String>) {
+    private fun collect(root: AccessibilityNodeInfo, out: MutableSet<String>): Boolean {
         val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
         pending.add(root)
         var visited = 0
@@ -307,10 +307,14 @@ class PayScreenReader(private val service: AccessibilityService, private val sco
                 node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() && it.length < 200 }?.let { out += it }
                 node.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() && it.length < 200 }?.let { out += it }
             }
-            for (i in 0 until minOf(node.childCount, 512 - visited - pending.size)) {
+            val children = node.childCount
+            for (i in 0 until children) {
+                // A partial tree could omit a second amount or a payment failure.
+                if (visited + pending.size >= 512) return false
                 node.getChild(i)?.let(pending::addLast)
             }
         }
+        return pending.isEmpty()
     }
 
     private companion object {
