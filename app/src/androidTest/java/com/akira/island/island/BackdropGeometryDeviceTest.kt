@@ -4,6 +4,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Alarm
@@ -60,6 +61,40 @@ class BackdropGeometryDeviceTest {
             assertTrue(spring.area.width>compact.area.width)
             assertTrue(spring.bottomRadius>0f)
         } finally { compose.mainClock.autoAdvance=true }
+    }
+
+    @Test fun glassToggleKeepsSamplingAndResendsTheSameContour() {
+        val glass = mutableStateOf(true)
+        val reports = AtomicInteger()
+        val registrations = AtomicInteger()
+        val removals = AtomicInteger()
+        compose.runOnUiThread {
+            compose.activity.setContent {
+                val sampler = remember {
+                    { sample: (() -> Unit)? ->
+                        if (sample == null) removals.incrementAndGet() else registrations.incrementAndGet()
+                        Unit
+                    }
+                }
+                val receive = remember {
+                    { _: BackdropGeometry -> reports.incrementAndGet(); Unit }
+                }
+                IslandTheme {
+                    IslandBody(Act.Idle, false, IslandSettings(liquidGlass = glass.value, reduceEffects = true),
+                        null, BatteryInfo(62), false, {}, onBackdropShape = receive, onBackdropSampler = sampler)
+                }
+            }
+        }
+        compose.waitUntil(5_000) { reports.get() > 0 }
+        val before = reports.get()
+        compose.runOnIdle { glass.value = false }
+        compose.waitForIdle()
+        compose.runOnIdle { glass.value = true }
+        compose.waitUntil(5_000) { reports.get() > before }
+        compose.runOnIdle {
+            assertEquals(1, registrations.get())
+            assertEquals(0, removals.get())
+        }
     }
 
     @Test fun geometryUsesTheActualCornerAndStopsReportingWhenDisabled() {

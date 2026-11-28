@@ -23,6 +23,7 @@ class SettingsExperienceTest {
             val instrumentation = InstrumentationRegistry.getInstrumentation()
             instrumentation.runOnMainSync {
                 SettingsRepo.init(instrumentation.targetContext)
+                SettingsRepo.finishSetup()
                 SettingsRepo.update { IslandSettings(language = AppLanguage.RU, reduceEffects = true, lastSeenVersion = com.akira.island.update.UpdateChecker.currentVersion(InstrumentationRegistry.getInstrumentation().targetContext)) }
             }
         }

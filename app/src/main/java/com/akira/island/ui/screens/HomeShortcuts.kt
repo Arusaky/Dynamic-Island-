@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Animation
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material.icons.rounded.Widgets
@@ -29,9 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.akira.island.core.tr
-import com.akira.island.ui.GroupItem
 import com.akira.island.ui.ItemIcon
-import com.akira.island.ui.Pos
 import com.akira.island.ui.Screen
 import com.akira.island.ui.Tile
 import com.akira.island.ui.Ui
@@ -50,9 +47,7 @@ internal fun HomeShortcuts(open: (Screen) -> Unit) {
         Shortcut(Icons.Rounded.Animation, tr("Движение", "Motion"), tr("Попробовать переходы", "Try transitions"),
             Tile.Pink, Modifier.weight(1f).fillMaxHeight()) { open(Screen.TESTS) }
     }
-    GroupItem(Pos.Single, Icons.Rounded.AutoAwesome, tr("Быстрая настройка", "Quick setup"),
-        tr("Материал, размер и выбор функций", "Material, size and features"),
-        color = Tile.Indigo, onClick = { open(Screen.SETUP) }) { Arrow() }
+
 }
 
 @Composable

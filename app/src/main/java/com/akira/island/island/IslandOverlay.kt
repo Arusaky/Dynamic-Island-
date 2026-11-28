@@ -633,9 +633,18 @@ internal fun IslandBody(
             }
         }
     }
-    DisposableEffect(onBackdropSampler, s.liquidGlass, s.notch, s.notchTopRadius, large, calibrating, egg, preview, backdropDensity) {
-        onBackdropSampler?.invoke { reportBackdrop() }
-        onDispose { onBackdropSampler?.invoke(null) }
+    val materialExample = if (preview && s.liquidGlass) previewGlassBackdrop(if (s.reduceEffects) 0 else s.glassBlurStrength)
+        else Modifier
+    val sampleBackdrop by rememberUpdatedState(newValue = { reportBackdrop() })
+    DisposableEffect(onBackdropSampler, onBackdropShape) {
+        reportedBackdrop[0] = null
+        onBackdropSampler?.invoke { sampleBackdrop() }
+        onDispose {
+            onBackdropSampler?.invoke(null)
+        }
+    }
+    SideEffect {
+        if (!s.liquidGlass) reportedBackdrop[0] = null
     }
     Box(
         Modifier
@@ -659,7 +668,8 @@ internal fun IslandBody(
             .drawBehind { if (glowAlpha > 0f) islandGlow(glowTint, glowAlpha, corner.value.toPx(), s.notch) }
             .then(
                 if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)
-                else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value }, sheen = { sheen.value }),
+                else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value },
+                    sheen = { sheen.value }, previewBackdrop = materialExample),
             )
             .then(if (!calibrating && banner?.effect == NoticeEffect.CHARGING)
                 chargingWave(s, banner.id) else Modifier)

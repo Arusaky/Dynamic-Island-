@@ -103,7 +103,7 @@ import com.akira.island.update.UpdateChecker
 
 enum class Screen {
     CARDS, EVENTS, GESTURES, LYRICS, SIZE, COLORS, INSTRUCTION, ABOUT, DIAG, LOOK, ANIM, EFFECTS, BANNERS,
-    SETUP, PERMISSIONS, TESTS, NOTIFICATIONS, BEHAVIOR, PAYDIAG, KEEPALIVE, BANKS, NOTIF_APPS, NOTIF_DIAG, FONT, EXTRAS, SEARCH, LAUNCHER, SUPPORT,
+    PERMISSIONS, TESTS, NOTIFICATIONS, BEHAVIOR, PAYDIAG, KEEPALIVE, BANKS, NOTIF_APPS, NOTIF_DIAG, FONT, EXTRAS, SEARCH, LAUNCHER, SUPPORT,
 }
 
 class MainActivity : ComponentActivity() {
@@ -144,7 +144,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun AppRoot(launcherSettingsRequest: Int) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    var stack by remember { mutableStateOf(if (SettingsRepo.setupPending) listOf(Screen.SETUP) else emptyList()) }
+    var setup by remember { mutableStateOf(SettingsRepo.setupPending) }
+    var stack by remember { mutableStateOf(emptyList<Screen>()) }
     var forward by remember { mutableStateOf(true) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     val open: (Screen) -> Unit = {
@@ -155,9 +156,9 @@ private fun AppRoot(launcherSettingsRequest: Int) {
         forward = false
         stack = stack.dropLast(1)
     }
-    BackHandler(enabled = stack.isNotEmpty(), onBack = back)
+    BackHandler(enabled = !setup && stack.isNotEmpty(), onBack = back)
     LaunchedEffect(launcherSettingsRequest) {
-        if (launcherSettingsRequest > 0) {
+        if (!setup && launcherSettingsRequest > 0) {
             tab = 3
             forward = true
             stack = listOf(Screen.LAUNCHER)
@@ -166,10 +167,17 @@ private fun AppRoot(launcherSettingsRequest: Int) {
 
     // Раз в 3 часа спрашиваем GitHub, не вышла ли новая версия; после обновления — «Что нового»
     val context = LocalContext.current
-    LaunchedEffect(Unit) { UpdateChecker.check(context.applicationContext, force = false) }
+    LaunchedEffect(setup) { if (!setup) UpdateChecker.check(context.applicationContext, force = false) }
     // Сменили язык — экраны рисуются заново на нём, а открытая вкладка и экран остаются
     LangScope {
-        if (stack.lastOrNull() != Screen.SETUP) WhatsNewDialog()
+        if (setup) {
+            SetupScreen {
+                SettingsRepo.finishSetup()
+                setup = false
+            }
+            return@LangScope
+        }
+        WhatsNewDialog()
 
         Box(Modifier.fillMaxSize().background(Ui.Bg)) {
             val key = stack.lastOrNull()?.name ?: "tab$tab"
@@ -197,7 +205,6 @@ private fun AppRoot(launcherSettingsRequest: Int) {
                     Screen.EVENTS.name -> EventsScreen(back)
                     Screen.GESTURES.name -> GesturesScreen(back)
                     Screen.LYRICS.name -> LyricsScreen(back)
-                    Screen.SETUP.name -> SetupScreen(back)
                     Screen.SIZE.name -> SizeScreen(back)
                     Screen.COLORS.name -> ColorsScreen(back)
                     Screen.INSTRUCTION.name -> InstructionScreen(back)

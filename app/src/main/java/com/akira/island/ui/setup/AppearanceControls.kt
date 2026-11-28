@@ -1,9 +1,15 @@
 package com.akira.island.ui.setup
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Height
 import androidx.compose.material.icons.rounded.Straighten
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import com.akira.island.core.tr
 import com.akira.island.data.IslandSettings
 import com.akira.island.data.SettingsRepo
@@ -19,9 +25,16 @@ import kotlin.math.roundToInt
 @Composable
 internal fun MaterialPicker(s: IslandSettings) {
     SectionHeader(tr("Материал острова", "Island material"))
-    ChoiceStrip(listOf(false, true), s.liquidGlass, { glass ->
-        if (glass) tr("Стекло", "Glass") else tr("Обычный", "Solid")
-    }) { SettingsRepo.update { copy(liquidGlass = it) } }
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        listOf(false, true).forEachIndexed { index, glass ->
+            SegmentedButton(
+                selected = s.liquidGlass == glass,
+                onClick = { SettingsRepo.update { copy(liquidGlass = glass) } },
+                shape = SegmentedButtonDefaults.itemShape(index, count = 2),
+                label = { Text(if (glass) tr("Стекло", "Glass") else tr("Обычный", "Solid")) },
+            )
+        }
+    }
 }
 
 @Composable
