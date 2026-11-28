@@ -6,6 +6,8 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import kotlin.math.abs
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -22,7 +24,7 @@ enum class PreviewScene { IDLE, MUSIC, MESSAGE, TIMER, RECORDING, TAXI, CHARGING
 /** The actual island renderer and animations, with isolated sample data and disabled phone actions. */
 @Composable
 fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, event: Notice? = null, notificationStyle: Boolean = false, twoActivities: Boolean = false,
-    light: GlassTilt = GlassTilt.Zero, onLight: ((GlassTilt) -> Unit)? = null) {
+    light: GlassTilt = GlassTilt.Zero, onLight: ((GlassTilt) -> Unit)? = null, onSwipe: ((Int) -> Unit)? = null) {
     val sampleMedia = remember { MediaInfo("preview", "", "Night Drive", "Alex · Demo", null, null, Tints.Lavender,
         180_000, 72_000, SystemClock.elapsedRealtime(), 1f, true, true) }
     val media = sampleMedia.copy(playing = !s.reduceEffects)
@@ -49,16 +51,31 @@ fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, eve
         s.copy(messageStyle = if (card) MessageStyle.CARD else MessageStyle.PILL) else s
     val previewLabel = tr("Живой пример — действия телефона отключены", "Live preview — phone actions are disabled")
     val lightCallback by rememberUpdatedState(onLight)
+    val swipeCallback by rememberUpdatedState(onSwipe)
     Box(Modifier.clearAndSetSemantics {
         contentDescription = previewLabel
         testTag = "appearance-preview"
-    }.pointerInput(onLight != null) {
-        if (lightCallback == null) return@pointerInput
+    }.pointerInput(Unit) {
+        val threshold = 24.dp.toPx()
         awaitPointerEventScope {
+            var start: Offset? = null
             try {
                 while (true) {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
                     val finger = event.changes.firstOrNull { it.pressed }
+                    if (finger != null) {
+                        if (start == null) start = finger.position
+                    } else {
+                        val first = start
+                        val end = event.changes.firstOrNull()?.position
+                        start = null
+                        if (first != null && end != null) {
+                            val delta = end - first
+                            if (abs(delta.x) >= threshold && abs(delta.x) > abs(delta.y)) {
+                                swipeCallback?.invoke(if (delta.x < 0f) 1 else -1)
+                            }
+                        }
+                    }
                     lightCallback?.invoke(if (finger == null) GlassTilt.Zero else GlassTilt(
                         (finger.position.x / size.width.coerceAtLeast(1) * 2f - 1f).coerceIn(-1f, 1f),
                         (finger.position.y / size.height.coerceAtLeast(1) * 2f - 1f).coerceIn(-1f, 1f),

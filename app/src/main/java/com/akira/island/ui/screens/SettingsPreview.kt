@@ -1,9 +1,6 @@
 package com.akira.island.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.animateDpAsState
 import com.akira.island.island.islandSpec
 import androidx.compose.foundation.layout.*
@@ -49,7 +46,6 @@ fun SettingsPreview(
 ) {
     val s by SettingsRepo.state.collectAsState()
     val context = LocalContext.current
-    val swipe by rememberUpdatedState(onSwipe)
     val boardHeight by animateDpAsState(if (card) 200.dp else 85.dp, islandSpec(s), label = "preview size")
     var light by remember { mutableStateOf(GlassTilt.Zero) }
     val lightX by animateFloatAsState(light.x, spring(dampingRatio = 1f, stiffness = 250f), label = "glassLightX")
@@ -64,18 +60,13 @@ fun SettingsPreview(
                 Text(if (card) tr("Свернуть", "Collapse") else tr("Раскрыть", "Expand"), color = Color.White, fontSize = 12.sp)
             } else Text(if (event != null) tr("Пример события", "Sample event") else if (twoActivities && scene != PreviewScene.IDLE && scene != PreviewScene.MESSAGE) tr("Музыка + таймер", "Music + timer") else if (card) tr("Раскрытая карточка", "Expanded card") else tr("Капсула", "Capsule"), color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
         }
-        Box(Modifier.fillMaxWidth().height(boardHeight).then(if (onSwipe == null) Modifier else Modifier.pointerInput(Unit) {
-            var horizontal = 0f
-            detectHorizontalDragGestures(
-                onDragStart = { horizontal = 0f },
-                onDragEnd = { if (kotlin.math.abs(horizontal) > 24.dp.toPx()) swipe?.invoke(if (horizontal < 0f) 1 else -1) },
-            ) { _, dx -> horizontal += dx }
-        }), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(boardHeight), contentAlignment = Alignment.Center) {
             // Preview the real dimensions, then scale down only to fit the sample board.
             if (!eventShown || respectVisibility && scene == PreviewScene.IDLE && s.hideIdle) Text(tr("Пример скрыт", "Preview hidden"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
             else Layout(content = { AppearancePreview(s, card, scene, event, notificationStyle, twoActivities,
                 light = GlassTilt(lightX, lightY),
-                onLight = if (s.liquidGlass && !s.reduceEffects && onSwipe == null) ({ light = it }) else null) }) { measurables, constraints ->
+                onLight = if (s.liquidGlass && !s.reduceEffects && onSwipe == null) ({ light = it }) else null,
+                onSwipe = onSwipe) }) { measurables, constraints ->
                 val max = 600.dp.roundToPx()
                 val p = measurables.single().measure(Constraints(maxWidth = max, maxHeight = 600.dp.roundToPx()))
                 val k = minOf(1f, constraints.maxWidth.toFloat() / p.width.coerceAtLeast(1), constraints.maxHeight.toFloat() / p.height.coerceAtLeast(1))
