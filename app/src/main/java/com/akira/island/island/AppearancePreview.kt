@@ -38,14 +38,16 @@ fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, eve
         tr("Подача через 4 минуты", "Pickup in 4 minutes"), "", null, null, 0, null,
         eta = tr("4 мин", "4 min"))
     val charging = BatteryInfo(82, charging = true)
+    val waveStart = remember(scene, event?.id) { SystemClock.elapsedRealtime() }
     val act = when {
+        event?.effect == NoticeEffect.CHARGING -> Act.ChargingA(BatteryInfo(event.battery ?: -1, charging = true), waveStart)
         event != null -> Act.NoticeA(event)
         scene == PreviewScene.MESSAGE -> Act.NoticeA(notice)
         scene == PreviewScene.TIMER -> Act.TimerA(timer)
         scene == PreviewScene.RECORDING -> Act.ChronoA(ChronoInfo("preview-recording", "", RecordingKind.SCREEN.title,
             null, 0, false, 0, pausedMs = 23_000, recordingKind = RecordingKind.SCREEN))
         scene == PreviewScene.TAXI -> Act.LiveA(ride)
-        scene == PreviewScene.CHARGING -> Act.ChargingA(charging)
+        scene == PreviewScene.CHARGING -> Act.ChargingA(charging, waveStart.takeUnless { card })
         scene == PreviewScene.IDLE -> Act.Idle
         else -> Act.MediaA(media)
     }

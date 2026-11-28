@@ -107,7 +107,6 @@ import com.akira.island.core.ChronoInfo
 import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
 import com.akira.island.core.Lyrics
-import com.akira.island.core.NoticeEffect
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
 import com.akira.island.core.tr
@@ -241,6 +240,12 @@ fun IslandOverlay(
         .map { NavScreen.merge(it, screenNav[it.pkg]) }
         .let { list -> list + screenNav.values.filter { sn -> sn.distance != null && list.none { it.pkg == sn.pkg } }.map(NavScreen::synthetic) }
 
+    val pendingCharge by IslandBus.chargingPulse.collectAsState()
+    val charging = chargingActivity(
+        battery, sticky = s.cardCharging && !s.chargingBrief, expanded = expanded,
+        pulse = pendingCharge?.takeIf { screenOn && it.isCurrent(SystemClock.elapsedRealtime()) },
+    )
+
     val call = if (s.cardCall) selectIslandCall(calls.values) else null
     // Смахнутый входящий не показываем, пока звонит (сбрасывает служба, когда звонить перестали)
     val callHidden by IslandBus.callHidden.collectAsState()
@@ -277,7 +282,7 @@ fun IslandOverlay(
         if (s.cardProgress) groupedProgress(progress.values.toList())?.let { persistent += Act.ProgressA(it) }
         if (s.evHotspot && hotspot.enabled == true) persistent += Act.HotspotA(hotspot)
         // «Только при подключении» — зарядка не занимает остров всё время, пока телефон заряжается
-        if (s.cardCharging && battery.charging && !s.chargingBrief) persistent += Act.ChargingA(battery)
+        if (charging != null && !charging.brief) persistent += charging
         if (s.historyMinutes != 0 && inbox.isNotEmpty()) persistent += Act.InboxA(inbox)
         // Ожидающий будильник остаётся доступен в пузырьке, не занимая основную капсулу.
         val alarm = nextAlarm
@@ -309,12 +314,14 @@ fun IslandOverlay(
     val primary = when {
         calibrating || s.collapseOnShade && shadeOpen -> Act.Idle
         previewing -> Act.LiveA(WidthDemo)
-        else -> primaryWithPendingAlarm(acts, expanded, focus)
+        else -> primaryWithPendingAlarm(acts, expanded, focus).let { primary ->
+            if (primary is Act.Idle && charging?.brief == true) charging else primary
+        }
     }
     val incoming = (primary as? Act.CallA)?.c?.incoming == true
     // Вторая активность — кружком рядом, если его не выключили в «Поведении»
     val secondary = if (!s.bubble || primary.transient || incoming || calibrating || s.collapseOnShade && shadeOpen) null
-    else secondaryWithPendingAlarm(acts, primary)
+    else secondaryWithPendingAlarm(acts, primary) ?: charging?.takeIf { it.brief }
     val showExpanded = expanded && !primary.transient && !incoming && !calibrating && !(s.collapseOnShade && shadeOpen)
     val h = s.height.dp
 
@@ -700,8 +707,6 @@ internal fun IslandBody(
                     sheen = { sheen.value }, previewBackdrop = materialExample, activityBackdrop = playerBackdrop,
                     touchHighlight = playerHighlight),
             )
-            .then(if (!calibrating && banner?.effect == NoticeEffect.CHARGING)
-                chargingWave(s, banner.id) else Modifier)
             .then(
                 if (egg && !calibrating) {
                     Modifier.drawWithContent {
@@ -1095,11 +1100,13 @@ private fun BubbleContent(act: Act, s: IslandSettings) {
     val tilt = IslandBus.glassTilt.collectAsState()
     val previewTilt = LocalGlassTilt.current
     val now = rememberNow(500, active = act is Act.TimerA)
+    val chargeWave = (act as? Act.ChargingA)?.waveStartedAt?.let { chargingWave(s, it) } ?: Modifier
     Box(
         Modifier
             .size(h)
             .islandSurface(s, false, CircleShape, act.surfaceAccent(), tilt = { previewTilt ?: tilt.value })
-            .clickable {
+            .then(chargeWave)
+            .clickable(enabled = !act.transient) {
                 haptic()
                 Controls.expand(act.id)
             },

@@ -290,6 +290,7 @@ class SystemEvents(private val context: Context) {
             }
 
             Intent.ACTION_POWER_DISCONNECTED -> {
+                IslandBus.chargingPulse.value = null
                 lastPowerChange = SystemClock.elapsedRealtime()
                 refreshBattery()
                 val level = IslandBus.battery.value.level

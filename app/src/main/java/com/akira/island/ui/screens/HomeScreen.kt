@@ -373,7 +373,7 @@ private fun DemoTile(d: Demo, modifier: Modifier, onClick: () -> Unit) {
 }
 
 private fun demos(context: Context): List<Demo> = listOf(
-    Demo(Icons.Rounded.Bolt, tr("Событие", "Event"), tr("Зарядка 75% во всю ширину", "Charging 75% at full width"), Tile.Green) {
+    Demo(Icons.Rounded.Bolt, tr("Событие", "Event"), tr("Зарядка 75% в компактной капсуле", "Charging 75% in the compact capsule"), Tile.Green) {
         IslandBus.post(Notice(tr("Зарядка", "Charging"), "75%", Ios.load(context, R.drawable.ios_flash), Tints.Green, battery = 75, effect = NoticeEffect.CHARGING))
     },
     Demo(Icons.Rounded.NotificationsOff, tr("Режим звука", "Ring mode"),

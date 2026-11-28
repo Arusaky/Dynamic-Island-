@@ -3,6 +3,7 @@ package com.akira.island.island
 import android.os.SystemClock
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,7 +41,7 @@ class ChargingMotionDeviceTest {
         try {
             compose.runOnUiThread { compose.activity.setContent {
                 Box(Modifier.size(180.dp, 44.dp).testTag("wave").background(Color.Black)
-                    .then(chargingWave(IslandSettings(), 1L)))
+                    .then(chargingWave(IslandSettings(), remember { SystemClock.elapsedRealtime() })))
             } }
             fun greenPixels(): Int {
                 val image = compose.onNodeWithTag("wave").captureToImage().toPixelMap()

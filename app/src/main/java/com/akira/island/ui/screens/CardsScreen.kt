@@ -84,10 +84,10 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
                 tr("Когда устройство заряжается", "When the device is charging"),
                 s.cardCharging, color = Tile.Green) { set { copy(cardCharging = it) } }
             if (s.cardCharging) {
-                // Зарядка часами занимает остров — можно оставить только плашку при подключении
+                // Длительная капсула опциональна, короткая индикация настраивается в «Событиях».
                 GroupToggle(Pos.Middle, Icons.Rounded.BatteryChargingFull, tr("Только при подключении", "Only when plugged in"),
-                    tr("Плашка «Зарядка» на пару секунд, без капсулы с процентами всё время зарядки",
-                        "A Charging banner for a couple of seconds, without the percentage capsule the whole time"),
+                    tr("Показывать компактный индикатор при подключении, если событие зарядки включено",
+                        "Show the compact indicator on connection when the charging event is enabled"),
                     s.chargingBrief, color = Tile.Green) { set { copy(chargingBrief = it) } }
             }
             GroupToggle(Pos.Middle, Icons.Rounded.BatteryChargingFull, tr("Только процент заряда", "Battery percentage only"),
@@ -114,7 +114,7 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
 
         if (s.cardLive) CompactTaxiPicker()
         GroupToggle(Pos.Single, Icons.Rounded.AutoAwesome, tr("Показывать плашку новой активности", "Show new activity banner"),
-            tr("Навигация, такси и доставка раскрываются при появлении", "Navigation, taxi and delivery expand when they first appear"),
+            tr("Навигация и доставка могут показать широкую плашку при появлении", "Navigation and deliveries can show a wide banner when they first appear"),
             s.liveBanner, color = Tile.Teal) { set { copy(liveBanner = it) } }
 
         SectionHeader(tr("Сюрпризы", "Surprises"))

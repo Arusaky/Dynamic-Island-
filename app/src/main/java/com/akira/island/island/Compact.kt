@@ -108,6 +108,7 @@ import com.akira.island.core.MsgAction
 import com.akira.island.core.ReplyState
 import com.akira.island.core.MediaInfo
 import com.akira.island.core.Notice
+import androidx.compose.ui.platform.testTag
 import com.akira.island.core.NoticeEffect
 import com.akira.island.core.NoticeStyle
 import com.akira.island.core.Tints
@@ -314,16 +315,25 @@ private fun CompactContentBody(act: Act, s: IslandSettings, wideWidth: Dp) {
             },
         )
 
-        is Act.ChargingA -> CompactRow(h, gap, side * 1.6f,
-            left = { Icon(Ios.flash, null, tint = Tints.Green, modifier = Modifier.size(icon)) },
-            right = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TimeText("${act.b.level}%", Tints.Green, 15)
-                    Spacer(Modifier.width(5.dp))
-                    if (!s.batteryPercentOnly) BatteryGlyph(act.b.level, Tints.Green, Modifier.size(h * 0.6f, h * 0.3f))
-                }
-            },
-        )
+        is Act.ChargingA -> {
+            val wave = act.waveStartedAt?.let { chargingWave(s, it) } ?: Modifier
+            Box(wave.testTag("compact-charging")) {
+                CompactRow(h, gap, side * 1.6f,
+                    left = { Icon(Ios.flash, tr("Зарядка", "Charging"), tint = Tints.Green, modifier = Modifier.size(icon)) },
+                    right = {
+                        if (act.b.level >= 0) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TimeText("${act.b.level}%", Tints.Green, 15)
+                                if (!s.batteryPercentOnly) {
+                                    Spacer(Modifier.width(5.dp))
+                                    BatteryGlyph(act.b.level, Tints.Green, Modifier.size(h * 0.6f, h * 0.3f))
+                                }
+                            }
+                        }
+                    },
+                )
+            }
+        }
 
         is Act.LiveA -> LiveCompact(act.l, s)
 

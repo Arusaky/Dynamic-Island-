@@ -1,5 +1,6 @@
 package com.akira.island.island
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -13,6 +14,9 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.dp
+import com.akira.island.core.BatteryInfo
+import com.akira.island.core.CHARGING_WAVE_MS
+import com.akira.island.core.ChargingPulse
 import com.akira.island.core.IslandBus
 import com.akira.island.core.Tints
 import com.akira.island.data.ExpandStyle
@@ -20,13 +24,27 @@ import com.akira.island.data.IslandSettings
 import kotlin.math.PI
 import kotlin.math.sin
 
-/** Two short green crests inside the charging surface, behind its battery reading. */
+internal fun chargingActivity(battery: BatteryInfo, sticky: Boolean, expanded: Boolean, pulse: ChargingPulse?): Act.ChargingA? {
+    val wave = pulse?.takeUnless { expanded }
+    if (sticky && battery.charging) return Act.ChargingA(battery, wave?.startedAt)
+    return wave?.let { Act.ChargingA(it.battery, it.startedAt, brief = true) }
+}
+
+internal fun chargingWaveProgress(startedAt: Long, now: Long): Float =
+    ((now - startedAt).toFloat() / CHARGING_WAVE_MS).coerceIn(0f, 1f)
+
+/** Two green crests on one cable event's timeline, including when the island changes size. */
 @Composable
-internal fun chargingWave(s: IslandSettings, eventId: Long): Modifier {
+internal fun chargingWave(s: IslandSettings, startedAt: Long): Modifier {
     val screenOn by IslandBus.screenOn.collectAsState()
     if (!screenOn || s.reduceEffects || s.expandStyle == ExpandStyle.INSTANT) return Modifier
-    val phase = remember(eventId) { Animatable(0f) }
-    LaunchedEffect(phase) { phase.animateTo(1f, tween(1050, easing = LinearEasing)) }
+    val phase = remember(startedAt) { Animatable(chargingWaveProgress(startedAt, SystemClock.elapsedRealtime())) }
+    LaunchedEffect(phase) {
+        val current = chargingWaveProgress(startedAt, SystemClock.elapsedRealtime())
+        if (current > phase.value) phase.snapTo(current)
+        val remaining = ((1f - phase.value) * CHARGING_WAVE_MS).toInt()
+        if (remaining > 0) phase.animateTo(1f, tween(remaining, easing = LinearEasing))
+    }
     return Modifier.drawWithCache {
         val w = size.width
         val h = size.height
@@ -46,9 +64,9 @@ internal fun chargingWave(s: IslandSettings, eventId: Long): Modifier {
             val t = phase.value
             if (t > 0f && t < 1f) {
                 val envelope = sin(PI * t).toFloat()
-                translate(left = w * t * 0.65f) { drawPath(crest, Tints.Green, alpha = 0.25f * envelope) }
+                translate(left = w * t * 0.65f) { drawPath(crest, Tints.Green, alpha = 0.37f * envelope) }
                 translate(left = w * (0.3f - t * 0.4f), top = depth * 0.36f) {
-                    drawPath(crest, Tints.Green, alpha = 0.22f * envelope)
+                    drawPath(crest, Tints.Green, alpha = 0.25f * envelope)
                 }
             }
         }

@@ -39,7 +39,11 @@ sealed class Act(val id: String, val transient: Boolean = false) {
     data class LiveA(val l: LiveInfo) : Act("live") {
         override val pkg: String get() = l.pkg
     }
-    data class ChargingA(val b: BatteryInfo) : Act("charging")
+    data class ChargingA(
+        val b: BatteryInfo,
+        val waveStartedAt: Long? = null,
+        val brief: Boolean = false,
+    ) : Act("charging", transient = brief)
     /** Оплата телефоном: ждём терминал. Не раскрывается и не уходит в пузырь */
     data class PayA(val p: PayReady) : Act("pay", transient = true) {
         override val pkg: String get() = p.pkg

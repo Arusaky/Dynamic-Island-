@@ -273,8 +273,9 @@ object NotificationParser {
         IslandBus.live.value = IslandBus.live.value.toMutableMap().apply {
             if (live != null) put(sbn.key, live) else remove(sbn.key)
         }
-        // Новая «живая активность» сначала показывается широкой плашкой, потом сворачивается в капсулу
-        if (live != null && !liveWasKnown && !initial && SettingsRepo.current.cardLive && SettingsRepo.current.liveBanner) {
+        // Поездка сразу остаётся в компактной капсуле. Навигация и доставка могут показать плашку.
+        if (live != null && live.kind != LiveKind.RIDE && !liveWasKnown && !initial &&
+            SettingsRepo.current.cardLive && SettingsRepo.current.liveBanner) {
             LiveParser.postBannerLater(context, sbn.key)
         }
 

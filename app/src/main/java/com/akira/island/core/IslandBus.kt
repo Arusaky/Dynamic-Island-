@@ -1,5 +1,7 @@
 package com.akira.island.core
 
+import android.os.SystemClock
+
 import com.akira.island.data.SettingsRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +65,7 @@ object IslandBus {
     /** Человек читает или отвечает — уведомление не убирается по таймеру */
     val noticeHold = MutableStateFlow(false)
     val battery = MutableStateFlow(BatteryInfo())
+    internal val chargingPulse = MutableStateFlow<ChargingPulse?>(null)
     /** Режим звука (AudioManager.RINGER_MODE_*) и «Не беспокоить» — для кнопок раскрытого острова */
     val ringer = MutableStateFlow(2)
     val dnd = MutableStateFlow(false)
@@ -150,6 +153,17 @@ object IslandBus {
     private val posted = MutableStateFlow(0)
 
     fun post(n: Notice) {
+        if (n.effect == NoticeEffect.CHARGING) {
+            val duration = SettingsRepo.current.noticeDurationMs.coerceAtLeast(CHARGING_WAVE_MS)
+            val pulse = ChargingPulse(BatteryInfo(n.battery ?: -1, charging = true),
+                SystemClock.elapsedRealtime(), duration)
+            chargingPulse.value = pulse
+            scope.launch {
+                delay(duration.toLong())
+                chargingPulse.compareAndSet(pulse, null)
+            }
+            return
+        }
         if (n.effect == NoticeEffect.RINGER) {
             val current = notice.value
             if (current?.effect == NoticeEffect.RINGER && notice.compareAndSet(current, n)) return
@@ -173,6 +187,12 @@ object IslandBus {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun waitingIsEmpty(): Boolean = queue.isEmpty && ringerChanges.isEmpty
+}
+
+internal const val CHARGING_WAVE_MS = 1050
+
+internal data class ChargingPulse(val battery: BatteryInfo, val startedAt: Long, val durationMs: Int) {
+    fun isCurrent(now: Long): Boolean = now - startedAt in 0L until durationMs.toLong()
 }
 
 /** Команды службе: скриншот без острова, блокировка, выключение и прокрутка по явному жесту. */
