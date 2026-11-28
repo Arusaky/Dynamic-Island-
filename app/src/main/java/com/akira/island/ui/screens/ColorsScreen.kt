@@ -132,8 +132,11 @@ fun ColorsScreen(onBack: () -> Unit) {
             }
         }
 
-        SectionHeader(tr("Прозрачность и эффекты", "Opacity and effects"))
+        SectionHeader(tr("Материал и эффекты", "Material and effects"))
         SettingsHint(tr("Общие для капсулы и карточек. Пример сверху показывает выбранный вид.", "Shared by the capsule and cards. The preview above shows the selected appearance."))
+        ChoiceStrip(listOf(false, true), s.liquidGlass, { if (it) tr("Стекло", "Glass") else tr("Обычная заливка", "Plain fill") }) {
+            SettingsRepo.update { copy(liquidGlass = it) }
+        }
         GroupSlider(Pos.Single, Icons.Rounded.Opacity, if (s.liquidGlass) tr("Плотность стекла", "Glass density") else tr("Непрозрачность заливки", "Fill opacity"),
             (if (s.liquidGlass) s.glassOpacity else s.islandOpacity).toFloat(), if (s.liquidGlass) 40f..100f else 20f..100f,
             "${if (s.liquidGlass) s.glassOpacity else s.islandOpacity}%", color = Tile.Teal) { v ->

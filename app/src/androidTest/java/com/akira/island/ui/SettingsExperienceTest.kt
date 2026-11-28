@@ -88,24 +88,23 @@ class SettingsExperienceTest {
         compose.runOnIdle { assertTrue(IslandBus.noticeHold.value) }
     }
 
-    @Test fun sizeAndMaterialControlsHaveOneHome() {
+    @Test fun appearanceControlsUseTheirStableSections() {
         compose.onAllNodesWithText("Оформление").onLast().performClick()
-        compose.onNodeWithText("Размер и форма").performScrollTo().performClick()
-        compose.onAllNodesWithText("Материал острова").assertCountEquals(1)
-        compose.onAllNodesWithText("Ширина капсулы").assertCountEquals(1)
-        compose.onAllNodesWithText("Высота капсулы").assertCountEquals(1)
-        compose.onNodeWithText("Ширина капсулы").performScrollTo()
-        screenshot("size-and-material")
+        compose.onNode(hasText("Положение и размер") and hasClickAction()).performScrollTo().performClick()
+        compose.onNodeWithText("Ширина").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Высота").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Стекло").assertDoesNotExist()
         compose.onNodeWithContentDescription("Назад").performClick()
 
-        compose.onNodeWithText("Положение у камеры").performScrollTo().performClick()
-        compose.onNodeWithText("Ширина капсулы").assertDoesNotExist()
-        compose.onNodeWithText("Высота капсулы").assertDoesNotExist()
+        compose.onNodeWithText("Размер и форма").performScrollTo().performClick()
+        compose.onNodeWithText("Ширина").assertDoesNotExist()
+        compose.onNodeWithText("Стекло").assertDoesNotExist()
         compose.onNodeWithContentDescription("Назад").performClick()
 
         compose.onNodeWithText("Цвет и рамка").performScrollTo().performClick()
-        compose.onNodeWithText("Материал острова").assertDoesNotExist()
-        compose.onNodeWithText("Стекло").assertDoesNotExist()
+        compose.onNodeWithText("Стекло", substring = false).performScrollTo().performClick()
+        compose.runOnIdle { assertTrue(SettingsRepo.current.liquidGlass) }
+        compose.onNodeWithTag("appearance-preview").assertIsDisplayed()
     }
 
     @Test fun expandedPreviewLightFollowsTouchWithReducedEffects() {

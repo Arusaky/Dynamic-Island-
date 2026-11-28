@@ -669,8 +669,6 @@ internal fun IslandBody(
             }
         }
     }
-    val materialExample = if (preview && s.liquidGlass) previewGlassBackdrop(if (s.reduceEffects) 0 else s.glassBlurStrength)
-        else Modifier
     val sampleBackdrop by rememberUpdatedState(newValue = { reportBackdrop() })
     DisposableEffect(onBackdropSampler, onBackdropShape) {
         reportedBackdrop[0] = null
@@ -705,7 +703,7 @@ internal fun IslandBody(
             .then(
                 if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)
                 else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value },
-                    sheen = { sheen.value }, previewBackdrop = materialExample, activityBackdrop = playerBackdrop,
+                    sheen = { sheen.value }, activityBackdrop = playerBackdrop,
                     touchHighlight = playerHighlight),
             )
             .then(

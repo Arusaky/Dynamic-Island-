@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -14,10 +15,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Height
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.WaterDrop
+import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,7 +50,7 @@ import com.akira.island.ui.Tile
 import com.akira.island.ui.Ui
 
 /**
- * Калибровка положения острова и выреза у камеры.
+ * Положение и размер острова: сдвиг по горизонтали, отступ сверху, ширина и высота пустой капсулы.
  * Пока экран открыт, остров на телефоне красный с белым ободком — так видно, где он стоит
  * относительно камеры. «Сохранить» оставляет новые значения, «назад» возвращает прежние.
  */
@@ -74,7 +77,7 @@ fun SizeScreen(onBack: () -> Unit) {
 
     Box(Modifier.fillMaxSize()) {
         Page(
-            tr("Положение у камеры", "Camera position"),
+            tr("Положение и размер", "Position and size"),
             onBack = cancel,
             action = {
                 Box(
@@ -104,6 +107,15 @@ fun SizeScreen(onBack: () -> Unit) {
                     s.notch, color = Tile.Teal,
                 ) { v -> set { copy(notch = v) } }
             }
+            Spacer(Modifier.height(16.dp))
+            Group {
+                GroupStepSlider(Pos.First, Icons.Rounded.Straighten, tr("Ширина", "Width"), s.width, 50..400, color = Tile.Purple) { v ->
+                    set { copy(width = v) }
+                }
+                GroupStepSlider(Pos.Last, Icons.Rounded.Height, tr("Высота", "Height"), s.height, 18..90, color = Tile.Pink) { v ->
+                    set { copy(height = v) }
+                }
+            }
         }
 
         Row(
@@ -128,4 +140,4 @@ fun SizeScreen(onBack: () -> Unit) {
 /** Всё, что настраивается на этом экране, — из [from]: для «назад» и «Сбросить». */
 private fun IslandSettings.withPlacement(from: IslandSettings) =
     copy(offsetX = from.offsetX, offsetY = from.offsetY, notchOffsetY = from.notchOffsetY,
-        notch = from.notch)
+        width = from.width, height = from.height, notch = from.notch)

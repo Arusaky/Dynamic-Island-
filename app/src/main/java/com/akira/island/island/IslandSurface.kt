@@ -21,7 +21,6 @@ fun Modifier.islandSurface(
     accent: Color? = null,
     tilt: () -> GlassTilt = { GlassTilt.Zero },
     sheen: () -> Float = { -1f },
-    previewBackdrop: Modifier = Modifier,
     activityBackdrop: Modifier = Modifier,
     touchHighlight: Modifier = Modifier,
 ): Modifier {
@@ -40,7 +39,6 @@ fun Modifier.islandSurface(
     return this
         .then(shadow)
         .clip(shape)
-        .then(previewBackdrop)
         .then(if (s.liquidGlass) Modifier.glassSurface(shape, base, s.glassOpacity / 100f,
             tilt = { if (s.reduceEffects) GlassTilt.Zero else tilt() },
             sheen = { if (s.reduceEffects) -1f else sheen() }) else Modifier.background(fill))
