@@ -141,7 +141,13 @@ val CalibrationRed = Color(0xFFFF6B6B)
 /** Запас вокруг острова в окне: под тень, «желе» и пузырь. */
 const val ISLAND_PAD_DP = 12
 
-private data class Frame(val activityId: String, val expanded: Boolean, val noticeStyle: NoticeStyle?)
+private data class Frame(
+    val activityId: String,
+    val expanded: Boolean,
+    val noticeStyle: NoticeStyle?,
+    val packageName: String?,
+    val presentation: String?,
+)
 
 @Composable
 fun IslandOverlay(
@@ -318,9 +324,13 @@ fun IslandOverlay(
     // Место под пузырь читается при измерении: кадр анимации не пересобирает остров
     val slot = animateDpAsState(if (bubbleVisible) activeHeight(s) + 6.dp else 0.dp, islandSpec(s), label = "slot")
 
-    // Раскрытая активность пропала (музыку закрыли, таймер отменили) — сворачиваемся, а не показываем часы
     val focusGone = expanded && focus != null && focus != Act.Idle.id && acts.none { it.id == focus }
-    LaunchedEffect(focusGone) { if (focusGone) Controls.collapse() }
+    val replacement = if (focusGone) replacementForExpandedFocus(acts) else null
+    LaunchedEffect(focusGone, replacement) {
+        if (focusGone && IslandBus.expanded.value && IslandBus.focus.value == focus) {
+            if (replacement != null) IslandBus.focus.value = replacement else Controls.collapse()
+        }
+    }
 
     // «Сворачивать раскрытый остров»: если его столько секунд не трогают, он сворачивается сам
     LaunchedEffect(showExpanded, s.autoCollapseSec) {
@@ -392,7 +402,8 @@ fun IslandOverlay(
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
             CompositionLocalProvider(LocalActivityIds provides activityOrder) {
-                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, if (bubbleVisible) secondary else lastSecondary[0], calibrating, onBody, onBubble, onBackdropShape, onBackdropSampler)
+                IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, if (bubbleVisible) secondary else lastSecondary[0], calibrating, onBody, onBubble, onBackdropShape, onBackdropSampler,
+                    expandedSecondary = if (showExpanded && !(primary is Act.TimerA && primary.t.ringing)) secondary else null)
             }
         }
         if (timedHidden) CameraWakeTarget(s, onBounds = { r ->
@@ -444,6 +455,7 @@ internal fun IslandRow(
     onBubbleBounds: (Rect) -> Unit,
     onBackdropShape: ((BackdropGeometry) -> Unit)? = null,
     onBackdropSampler: (((() -> Unit)?) -> Unit)? = null,
+    expandedSecondary: Act? = null,
 ) {
     val compactWidth = remember { mutableIntStateOf(0) }
     val left = s.bubbleSide == BubbleSide.LEFT
@@ -452,7 +464,8 @@ internal fun IslandRow(
         content = {
             BubbleSlot(bubbleVisible, bubbleAct, s, onBubbleBounds, left)
             IslandBody(primary, showExpanded, s, lyrics, battery, calibrating, onBodyBounds,
-                onBackdropShape, onBackdropSampler, onCompactWidth = { compactWidth.intValue = it })
+                onBackdropShape, onBackdropSampler, onCompactWidth = { compactWidth.intValue = it },
+                expandedSecondary = expandedSecondary)
         },
     ) { children, constraints ->
         val loose = Constraints(maxHeight = constraints.maxHeight)
@@ -512,6 +525,7 @@ internal fun IslandBody(
     onBackdropShape: ((BackdropGeometry) -> Unit)? = null,
     onBackdropSampler: (((() -> Unit)?) -> Unit)? = null,
     onCompactWidth: ((Int) -> Unit)? = null,
+    expandedSecondary: Act? = null,
 ) {
     val preview = LocalIslandPreview.current
     val context = LocalContext.current
@@ -791,7 +805,12 @@ internal fun IslandBody(
         // без него — прежнее перетекание. Форма в обоих случаях меняется пружиной из «Раскрытия острова»
         val widths = remember { HashMap<Frame, Int>() }
         // Only a change of activity or presentation starts a morph. Telemetry stays live in its slot.
-        val scene = Frame(primary.id, expanded, banner?.style)
+        val presentation = when (primary) {
+            is Act.ChronoA -> primary.c.recordingKind?.name ?: if (primary.c.countDown) "countdown" else "stopwatch"
+            is Act.LiveA -> primary.l.kind.name
+            else -> null
+        }
+        val scene = Frame(primary.id, expanded, banner?.style, primary.pkg, presentation)
         val frames = updateTransition(scene, label = "island")
         frames.AnimatedContent(
             contentAlignment = Alignment.TopCenter,
@@ -806,7 +825,12 @@ internal fun IslandBody(
         ) { f ->
             val last = remember(f) { arrayOf(primary) }
             val act = if (f == scene) primary else last[0]
-            if (f == scene) SideEffect { last[0] = primary }
+            val lastSecondary = remember(f) { arrayOf(expandedSecondary) }
+            val secondary = if (f == scene) expandedSecondary else lastSecondary[0]
+            if (f == scene) SideEffect {
+                last[0] = primary
+                lastSecondary[0] = expandedSecondary
+            }
             val reportWidth = if (f == scene && !f.expanded && onCompactWidth != null)
                 Modifier.onSizeChanged { onCompactWidth(it.width) } else Modifier
             val flow = when {
@@ -816,7 +840,7 @@ internal fun IslandBody(
             }
             Box(reportWidth.then(flow)) {
                 if (f.expanded) {
-                    ExpandedContent(act, s, lyrics, battery, expandedWidth)
+                    ExpandedContent(act, s, lyrics, battery, expandedWidth, secondary)
                 } else {
                     CompactContent(act, s, expandedWidth)
                 }

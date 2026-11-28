@@ -1076,9 +1076,10 @@ fun liveShort(l: LiveInfo): String? = if (l.kind == LiveKind.RIDE) l.eta else l.
 @Composable
 fun LiveGlyph(l: LiveInfo, size: Dp, tint: Color) {
     when {
+        l.kind == LiveKind.RIDE -> AppIcon(l.icon ?: l.art, size, Icons.Rounded.DirectionsCar, tint)
         l.turn != null -> TurnArrow(l.turn, tint, Modifier.size(size))
         l.art != null -> Image(l.art, null, Modifier.size(size).clip(CircleShape))
-        else -> AppIcon(l.icon, size, if (l.kind == LiveKind.RIDE) Icons.Rounded.DirectionsCar else Ios.navigate, tint)
+        else -> AppIcon(l.icon, size, Ios.navigate, tint)
     }
 }
 
@@ -1088,16 +1089,14 @@ private fun LiveCompact(l: LiveInfo, s: IslandSettings) {
     val h = activeHeight(s)
     val tint = liveTint(l.kind)
     val taxi = l.kind == LiveKind.RIDE
-    val width = if (taxi) {
-        if (s.taxiEtaInCapsule) maxOf(s.width.dp + s.activeWidth.coerceIn(0, 48).dp, compactGap(s) + 92.dp)
-        else maxOf(s.width.dp, compactGap(s) + h * 1.65f)
-    } else null
+    val width = if (taxi) taxiCapsuleWidth(LocalConfiguration.current.screenWidthDp, s.width, s.activeWidth,
+        h.value, compactGap(s).value.toInt(), s.taxiEtaInCapsule).dp else null
     CompactRow(h, compactGap(s), sideMax(s) * 1.5f, fixedWidth = width,
         left = { LiveGlyph(l, if (l.turn != null) h * 0.51f else h * 0.56f, tint) },
         right = {
             val short = liveShort(l)
             if (short != null && (!taxi || s.taxiEtaInCapsule)) {
-                Text(short, color = tint, fontSize = if (taxi) 13.sp else 17.sp, style = Digits.copy(fontWeight = FontWeight.Bold.island), maxLines = 1,
+                Text(short, color = tint, fontSize = if (taxi) 12.sp else 17.sp, style = Digits.copy(fontWeight = FontWeight.Bold.island), maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
             } else if (!taxi || s.taxiEtaInCapsule) {
                 GlowDot(tint, h * 0.22f, animate = !taxi && !s.reduceEffects)

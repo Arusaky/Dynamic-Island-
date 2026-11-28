@@ -215,7 +215,7 @@ object NotificationParser {
             mediaNotification = isMedia,
             hasRecordingAction = recordingActions.any { isSpecificRecordingAction(it.title?.toString().orEmpty()) })
         val recorder = call == null && recording.recording
-        val live = if (call == null && !isMedia && !recorder) LiveParser.parse(context, sbn, title) else null
+        val live = if (call == null && !isMedia && !recorder) LiveParser.parse(context, sbn, title, hasProgress) else null
         // Неактивный (на паузе) таймер, который остров уже убрал, снова не показываем
         val chrono = live == null && call == null && !recording.playback && (recorder || !isMedia && (ticking || pausedMs != null || runningMs != null)) &&
             !ClockControl.wasDismissed(sbn.key, pausedMs)
@@ -256,8 +256,9 @@ object NotificationParser {
             }
         }
 
+        val transferProgress = hasProgress && LiveApps.kind(sbn.packageName, n.category) != LiveKind.RIDE
         IslandBus.progress.value = IslandBus.progress.value.toMutableMap().apply {
-            if (hasProgress && live == null && !recorder) {
+            if (transferProgress && live == null && !recorder) {
                 val detailText = listOf(Notification.EXTRA_TEXT, Notification.EXTRA_BIG_TEXT, Notification.EXTRA_SUB_TEXT)
                     .mapNotNull { key -> ex.getCharSequence(key)?.takeIf { it.length <= 1024 }?.toString() }
                     .distinct().joinToString("\n")

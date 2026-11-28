@@ -42,7 +42,7 @@ object LiveParser {
     private val clock = Regex("""\b\d{1,2}:\d{2}\b""")
     private val minutes = Regex("""\b\d{1,3}\s?(мин|ч|min|h)\b""", RegexOption.IGNORE_CASE)
 
-    fun parse(context: Context, sbn: StatusBarNotification, fallbackTitle: String): LiveInfo? {
+    fun parse(context: Context, sbn: StatusBarNotification, fallbackTitle: String, hasProgress: Boolean = false): LiveInfo? {
         val n = sbn.notification
         val ex = n.extras
         val kind = LiveApps.kind(sbn.packageName, n.category) ?: return null
@@ -54,19 +54,22 @@ object LiveParser {
         val fields = listOf(head, text, big, sub)
         val ride = kind == LiveKind.RIDE
         if (ride && RideNotification.isFinished(fields)) return null
-        // Собрать чужую раскладку — дорого, а обычные уведомления (акции, «заказ доставлен») её не требуют
-        val remote = if (!sbn.isOngoing) {
+        val rideStatusInFields = ride && RideNotification.isActive(fields)
+        // Read the custom layout for an ongoing event, or when a ride reports progress without a textual status.
+        val remote = if (!sbn.isOngoing && !(ride && hasProgress && !rideStatusInFields)) {
             Remote(emptyList(), null, tr("не разбиралась: уведомление не постоянное", "not parsed: the notification isn't ongoing"))
-        } else if (findDistance(fields) != null && findEta(fields) != null) {
+        } else if (rideStatusInFields && text.isNotBlank()) {
+            Remote(emptyList(), null, tr("не разбиралась: статус поездки уже в полях", "not parsed: ride status is already in the fields"))
+        } else if (!ride && findDistance(fields) != null && findEta(fields) != null) {
             Remote(emptyList(), null, tr("не разбиралась: расстояние и время есть в полях", "not parsed: distance and time are in the fields"))
         } else {
             remoteFor(context, sbn.key, n)
         }
         LiveDebug.record(context, sbn, head, text, big, sub, remote.texts, remote.note)
-        if (!sbn.isOngoing && !(ride && RideNotification.isActive(fields))) return null
-        if (head.isEmpty() && text.isEmpty() && remote.texts.isEmpty()) return null
-
         val all = fields + remote.texts
+        if (ride && RideNotification.isFinished(all)) return null
+        if (!sbn.isOngoing && !(ride && RideNotification.isActive(all))) return null
+        if (all.all(String::isBlank)) return null
         val hint = if (ride) null else instructionOf(all)
         val turn = hint?.let { detectTurn(listOf(it)) }
         val art = if (turn == null) {
@@ -81,7 +84,7 @@ object LiveParser {
             key = sbn.key,
             pkg = sbn.packageName,
             kind = kind,
-            title = head.ifEmpty { fallbackTitle },
+            title = head.ifEmpty { if (ride) tr("Такси", "Taxi") else fallbackTitle },
             text = instruction,
             sub = sub,
             icon = NotificationParser.icon(context, sbn.packageName),

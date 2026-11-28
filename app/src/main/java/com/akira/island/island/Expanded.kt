@@ -142,12 +142,12 @@ import java.util.Date
 private val Dim = Color.White.copy(alpha = 0.55f)
 
 @Composable
-fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: BatteryInfo, width: Dp) {
-    IslandTextTheme(s) { ExpandedContentBody(act, s, lyrics, battery, width) }
+fun ExpandedContent(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: BatteryInfo, width: Dp, secondary: Act? = null) {
+    IslandTextTheme(s) { ExpandedContentBody(act, s, lyrics, battery, width, secondary) }
 }
 
 @Composable
-private fun ExpandedContentBody(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: BatteryInfo, width: Dp) {
+private fun ExpandedContentBody(act: Act, s: IslandSettings, lyrics: Lyrics?, battery: BatteryInfo, width: Dp, secondary: Act?) {
     // Фонарик, как в iOS 18, — не широкая плашка, а высокая карточка с лучом
     if (act is Act.TorchA) {
         TorchCard(act.t, s)
@@ -155,24 +155,30 @@ private fun ExpandedContentBody(act: Act, s: IslandSettings, lyrics: Lyrics?, ba
     }
     // Сверху — полоса камеры: содержимое начинается ниже выреза, чтобы он ничего не закрывал.
     // Само содержимое — крупнее или мельче по «Размеру содержимого»
-    Box(Modifier.width(width).heightIn(max = s.expandedMaxHeight.dp)
+    Column(Modifier.width(width).heightIn(max = s.expandedMaxHeight.dp)
         .padding(start = 22.dp, end = 22.dp, top = cameraInset(s), bottom = 20.dp)) {
-        Scaled(s.contentScale) {
-            when (act) {
-                is Act.HotspotA -> HotspotDetails(act.status)
-                is Act.MediaA -> MediaExpanded(act.m, s, lyrics, battery)
-                is Act.TimerA -> TimerExpanded(act.t, s)
-                is Act.StopwatchA -> StopwatchExpanded(act.w)
-                is Act.TorchA -> Unit
-                is Act.ChronoA -> ChronoExpanded(act.c, s)
-                is Act.ProgressA -> ProgressExpanded(act.p, s)
-                is Act.LiveA -> LiveExpanded(act.l)
-                is Act.CallA -> CallExpanded(act.c)
-                is Act.AlarmA -> AlarmExpanded(act.a, s)
-                is Act.InboxA -> InboxExpanded(act.items)
-                // Зарядка раскрывается как пустой остров: часы, заряд и кнопки — зарядка не закрывает их собой
-                else -> IdleExpanded(s, battery)
+        Box(Modifier.weight(1f, fill = false)) {
+            Scaled(s.contentScale) {
+                when (act) {
+                    is Act.HotspotA -> HotspotDetails(act.status)
+                    is Act.MediaA -> MediaExpanded(act.m, s, lyrics, battery)
+                    is Act.TimerA -> TimerExpanded(act.t, s)
+                    is Act.StopwatchA -> StopwatchExpanded(act.w)
+                    is Act.TorchA -> Unit
+                    is Act.ChronoA -> ChronoExpanded(act.c, s)
+                    is Act.ProgressA -> ProgressExpanded(act.p, s)
+                    is Act.LiveA -> if (act.l.kind == LiveKind.RIDE) RideCard(act.l) else LiveExpanded(act.l)
+                    is Act.CallA -> CallExpanded(act.c)
+                    is Act.AlarmA -> AlarmExpanded(act.a, s)
+                    is Act.InboxA -> InboxExpanded(act.items)
+                    // Зарядка раскрывается как пустой остров: часы, заряд и кнопки — зарядка не закрывает их собой
+                    else -> IdleExpanded(s, battery)
+                }
             }
+        }
+        if (secondary != null) {
+            Spacer(Modifier.height(8.dp))
+            ActivityShortcut(secondary, Modifier.align(Alignment.End))
         }
     }
 }
@@ -840,8 +846,7 @@ private fun LiveExpanded(l: LiveInfo) {
             if (l.text.isNotEmpty()) {
                 Text(l.text, color = Tints.Gray, fontSize = 14.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            val line = l.eta?.takeUnless { l.kind == LiveKind.RIDE && (it in l.title || it in l.text) }
-                ?: l.sub.takeIf { it.isNotEmpty() && l.kind != LiveKind.RIDE }
+            val line = l.eta ?: l.sub.takeIf { it.isNotEmpty() }
             if (line != null) {
                 Text(line, color = tint, fontSize = 14.sp, style = Digits, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
