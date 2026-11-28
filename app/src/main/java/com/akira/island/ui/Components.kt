@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -90,9 +91,9 @@ fun Page(
     subtitle: String? = null,
     action: (@Composable () -> Unit)? = null,
     preview: (@Composable () -> Unit)? = null,
+    scroll: ScrollState = rememberScrollState(),
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val scroll = rememberScrollState()
     Column(
         Modifier.fillMaxSize()
             .then(if (preview == null) Modifier.verticalScroll(scroll) else Modifier)

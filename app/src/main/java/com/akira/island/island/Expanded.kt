@@ -114,6 +114,7 @@ import com.akira.island.core.RecordingKind
 import com.akira.island.core.Controls
 import com.akira.island.core.IslandBus
 import com.akira.island.core.Lang
+import com.akira.island.core.LiveKind
 import com.akira.island.core.LiveInfo
 import com.akira.island.core.Lyrics
 import com.akira.island.core.LyricsStatus
@@ -839,7 +840,8 @@ private fun LiveExpanded(l: LiveInfo) {
             if (l.text.isNotEmpty()) {
                 Text(l.text, color = Tints.Gray, fontSize = 14.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            val line = l.eta ?: l.sub.takeIf { it.isNotEmpty() }
+            val line = l.eta?.takeUnless { l.kind == LiveKind.RIDE && (it in l.title || it in l.text) }
+                ?: l.sub.takeIf { it.isNotEmpty() && l.kind != LiveKind.RIDE }
             if (line != null) {
                 Text(line, color = tint, fontSize = 14.sp, style = Digits, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }

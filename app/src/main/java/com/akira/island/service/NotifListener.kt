@@ -155,17 +155,7 @@ object NotificationParser {
         val indeterminate = ex.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)
         val ongoing = n.flags and Notification.FLAG_ONGOING_EVENT != 0
         val hasProgress = !isMedia && ((max > 0 && value < max) || (indeterminate && ongoing))
-        IslandBus.progress.value = IslandBus.progress.value.toMutableMap().apply {
-            if (hasProgress) {
-                val detailText = listOf(Notification.EXTRA_TEXT, Notification.EXTRA_BIG_TEXT, Notification.EXTRA_SUB_TEXT)
-                    .mapNotNull { key -> ex.getCharSequence(key)?.takeIf { it.length <= 1024 }?.toString() }
-                    .distinct().joinToString("\n")
-                put(sbn.key, ProgressInfo(sbn.key, sbn.packageName, title, icon(context, sbn.packageName), value, max, indeterminate,
-                    sbn.postTime, TransferDetailsParser.parse(detailText)))
-            } else {
-                remove(sbn.key)
-            }
-        }
+
 
         val call = when {
             isMedia -> null
@@ -225,8 +215,9 @@ object NotificationParser {
             mediaNotification = isMedia,
             hasRecordingAction = recordingActions.any { isSpecificRecordingAction(it.title?.toString().orEmpty()) })
         val recorder = call == null && recording.recording
+        val live = if (call == null && !isMedia && !recorder) LiveParser.parse(context, sbn, title) else null
         // Неактивный (на паузе) таймер, который остров уже убрал, снова не показываем
-        val chrono = call == null && !recording.playback && (recorder || !isMedia && (ticking || pausedMs != null || runningMs != null)) &&
+        val chrono = live == null && call == null && !recording.playback && (recorder || !isMedia && (ticking || pausedMs != null || runningMs != null)) &&
             !ClockControl.wasDismissed(sbn.key, pausedMs)
         if (clock && chrono) ClockControl.reader?.onNotificationChrono(sbn.packageName)
         if (pausedMs != null && chrono) ClockControl.dropPausedLater(sbn.key)
@@ -265,7 +256,18 @@ object NotificationParser {
             }
         }
 
-        val live = if (call == null && !isMedia && !recorder) LiveParser.parse(context, sbn, title) else null
+        IslandBus.progress.value = IslandBus.progress.value.toMutableMap().apply {
+            if (hasProgress && live == null && !recorder) {
+                val detailText = listOf(Notification.EXTRA_TEXT, Notification.EXTRA_BIG_TEXT, Notification.EXTRA_SUB_TEXT)
+                    .mapNotNull { key -> ex.getCharSequence(key)?.takeIf { it.length <= 1024 }?.toString() }
+                    .distinct().joinToString("\n")
+                put(sbn.key, ProgressInfo(sbn.key, sbn.packageName, title, icon(context, sbn.packageName), value, max, indeterminate,
+                    sbn.postTime, TransferDetailsParser.parse(detailText)))
+            } else {
+                remove(sbn.key)
+            }
+        }
+
         val liveWasKnown = sbn.key in IslandBus.live.value
         IslandBus.live.value = IslandBus.live.value.toMutableMap().apply {
             if (live != null) put(sbn.key, live) else remove(sbn.key)
@@ -273,12 +275,6 @@ object NotificationParser {
         // Новая «живая активность» сначала показывается широкой плашкой, потом сворачивается в капсулу
         if (live != null && !liveWasKnown && !initial && SettingsRepo.current.cardLive && SettingsRepo.current.liveBanner) {
             LiveParser.postBannerLater(context, sbn.key)
-        }
-        if (recorder) IslandBus.progress.value = IslandBus.progress.value - sbn.key
-        // Навигатор и такси показываются своей карточкой, а не полоской прогресса или таймером
-        if (live != null) {
-            IslandBus.progress.value = IslandBus.progress.value - sbn.key
-            IslandBus.chrono.value = IslandBus.chrono.value - sbn.key
         }
 
         val service = context as? NotificationListenerService
@@ -473,9 +469,9 @@ object LiveApps {
     )
 
     fun kind(pkg: String, category: String?): LiveKind? = when {
-        pkg in nav || category == Notification.CATEGORY_NAVIGATION -> LiveKind.NAV
         pkg in ride -> LiveKind.RIDE
         pkg in delivery -> LiveKind.DELIVERY
+        pkg in nav || category == Notification.CATEGORY_NAVIGATION -> LiveKind.NAV
         else -> null
     }
 }

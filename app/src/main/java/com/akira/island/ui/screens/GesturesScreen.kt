@@ -75,5 +75,5 @@ fun GesturesScreen(onBack: () -> Unit) {
 private fun swipeLabel(mode: SideSwipe): String = when (mode) {
     SideSwipe.OFF -> tr("Выключен", "Off")
     SideSwipe.TRACKS -> tr("Переключать треки", "Change tracks")
-    SideSwipe.ACTIVITIES -> tr("Листать карточки", "Switch cards")
+    SideSwipe.ACTIVITIES -> tr("Листать активности в капсуле и карточке", "Switch activities in the capsule and card")
 }

@@ -112,6 +112,7 @@ fun CardsScreen(onBack: () -> Unit, onInstruction: () -> Unit) {
                 "Google and Yandex Maps, Navigator, 2GIS, Yandex Go, Uber and others — distance and time in the capsule, details when expanded"),
             s.cardLive, color = Tile.Teal) { set { copy(cardLive = it) } }
 
+        if (s.cardLive) CompactTaxiPicker()
         GroupToggle(Pos.Single, Icons.Rounded.AutoAwesome, tr("Показывать плашку новой активности", "Show new activity banner"),
             tr("Навигация, такси и доставка раскрываются при появлении", "Navigation, taxi and delivery expand when they first appear"),
             s.liveBanner, color = Tile.Teal) { set { copy(liveBanner = it) } }

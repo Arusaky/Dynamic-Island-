@@ -459,6 +459,7 @@ data class IslandSettings(
     val messageIconPosition: MessageIconPosition? = null,
     val batteryPercentOnly: Boolean = false,
     val liveBanner: Boolean = true,
+    val taxiEtaInCapsule: Boolean = true,
     val actionColorEnabled: Boolean = false,
     val actionColor: Long = 0xFFC6C3F7,
 
@@ -490,6 +491,13 @@ data class IslandSettings(
 
 object SettingsRepo {
     private const val KEY = "settings_v1"
+    private const val SETUP_PENDING = "setup_pending"
+
+    val setupPending: Boolean get() = prefs?.getBoolean(SETUP_PENDING, false) == true
+
+    fun finishSetup() {
+        prefs?.edit()?.remove(SETUP_PENDING)?.apply()
+    }
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
@@ -510,6 +518,10 @@ object SettingsRepo {
         val p = context.applicationContext.getSharedPreferences("island", Context.MODE_PRIVATE)
         prefs = p
         hadSavedSettings = p.contains(KEY)
+        if (!hadSavedSettings) {
+            p.edit().putBoolean(SETUP_PENDING, true).apply()
+            _state.value = IslandSettings(cardRecording = false, cardLive = false)
+        }
         p.getString(KEY, null)?.let { raw ->
             runCatching { json.decodeFromString<IslandSettings>(raw) }.onSuccess { _state.value = it }
         }

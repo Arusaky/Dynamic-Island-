@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import com.akira.island.R
+import com.akira.island.core.LiveKind
 import com.akira.island.core.LiveInfo
 import com.akira.island.core.Notice
 import com.akira.island.core.NoticeStyle
@@ -51,6 +52,8 @@ object LiveParser {
         val sub = (ex.getCharSequence(Notification.EXTRA_SUB_TEXT) ?: ex.getCharSequence(Notification.EXTRA_INFO_TEXT))
             ?.toString()?.trim().orEmpty()
         val fields = listOf(head, text, big, sub)
+        val ride = kind == LiveKind.RIDE
+        if (ride && RideNotification.isFinished(fields)) return null
         // Собрать чужую раскладку — дорого, а обычные уведомления (акции, «заказ доставлен») её не требуют
         val remote = if (!sbn.isOngoing) {
             Remote(emptyList(), null, tr("не разбиралась: уведомление не постоянное", "not parsed: the notification isn't ongoing"))
@@ -60,11 +63,11 @@ object LiveParser {
             remoteFor(context, sbn.key, n)
         }
         LiveDebug.record(context, sbn, head, text, big, sub, remote.texts, remote.note)
-        if (!sbn.isOngoing) return null
+        if (!sbn.isOngoing && !(ride && RideNotification.isActive(fields))) return null
         if (head.isEmpty() && text.isEmpty() && remote.texts.isEmpty()) return null
 
         val all = fields + remote.texts
-        val hint = instructionOf(all)
+        val hint = if (ride) null else instructionOf(all)
         val turn = hint?.let { detectTurn(listOf(it)) }
         val art = if (turn == null) {
             runCatching { n.getLargeIcon()?.loadDrawable(context)?.toBitmap(128, 128) }.getOrNull() ?: remote.image
@@ -85,8 +88,8 @@ object LiveParser {
             art = art?.asImageBitmap(),
             postTime = sbn.postTime,
             open = n.contentIntent,
-            distance = findDistance(all),
-            eta = findEta(all),
+            distance = if (ride) null else findDistance(all),
+            eta = if (ride) RideNotification.compactStatus(all) else findEta(all),
             turn = turn,
         )
     }

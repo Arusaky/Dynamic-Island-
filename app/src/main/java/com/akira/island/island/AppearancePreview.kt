@@ -17,7 +17,7 @@ import com.akira.island.data.MessageStyle
 import androidx.compose.runtime.rememberUpdatedState
 
 internal val LocalIslandPreview = staticCompositionLocalOf { false }
-enum class PreviewScene { IDLE, MUSIC, MESSAGE, TIMER }
+enum class PreviewScene { IDLE, MUSIC, MESSAGE, TIMER, RECORDING, TAXI, CHARGING }
 
 /** The actual island renderer and animations, with isolated sample data and disabled phone actions. */
 @Composable
@@ -30,10 +30,18 @@ fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, eve
     val message = remember { AppMessage("preview", "", "Messages", tr("Привет! Во сколько встречаемся?", "Hi! What time are we meeting?"), null, null, null) }
     val icon = Ios.chatbubble
     val notice = remember(message, icon) { Notice(tr("Анна", "Anna"), icon = icon, tint = Tints.Blue, style = NoticeStyle.MESSAGE, message = message) }
+    val ride = LiveInfo("preview-taxi", "", LiveKind.RIDE, tr("Машина в пути", "Car on the way"),
+        tr("Подача через 4 минуты", "Pickup in 4 minutes"), "", null, null, 0, null,
+        eta = tr("4 мин", "4 min"))
+    val charging = BatteryInfo(82, charging = true)
     val act = when {
         event != null -> Act.NoticeA(event)
         scene == PreviewScene.MESSAGE -> Act.NoticeA(notice)
         scene == PreviewScene.TIMER -> Act.TimerA(timer)
+        scene == PreviewScene.RECORDING -> Act.ChronoA(ChronoInfo("preview-recording", "", RecordingKind.SCREEN.title,
+            null, 0, false, 0, pausedMs = 23_000, recordingKind = RecordingKind.SCREEN))
+        scene == PreviewScene.TAXI -> Act.LiveA(ride)
+        scene == PreviewScene.CHARGING -> Act.ChargingA(charging)
         scene == PreviewScene.IDLE -> Act.Idle
         else -> Act.MediaA(media)
     }
@@ -44,7 +52,8 @@ fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, eve
     Box(Modifier.clearAndSetSemantics {
         contentDescription = previewLabel
         testTag = "appearance-preview"
-    }.pointerInput(Unit) {
+    }.pointerInput(onLight != null) {
+        if (lightCallback == null) return@pointerInput
         awaitPointerEventScope {
             try {
                 while (true) {
@@ -66,7 +75,7 @@ fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, eve
                 if (pair) {
                     IslandRow(slot, settings, if (settings.preferMusic) Act.MediaA(media) else Act.TimerA(timer), false, null,
                         BatteryInfo(72), settings.bubble, if (settings.preferMusic) Act.TimerA(timer) else Act.MediaA(media), false, {}, {})
-                } else IslandBody(act, card && event == null && scene != PreviewScene.MESSAGE, settings, null, BatteryInfo(72, false), false, {})
+                } else IslandBody(act, card && event == null && scene != PreviewScene.MESSAGE, settings, null, if (scene == PreviewScene.CHARGING) charging else BatteryInfo(72), false, {})
             }
         }
     }

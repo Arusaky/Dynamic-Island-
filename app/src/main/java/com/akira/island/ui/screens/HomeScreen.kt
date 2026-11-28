@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -143,9 +144,6 @@ fun HomeScreen(open: (Screen) -> Unit) {
     val missing = perms.missing
 
     Page(tr("Динамический остров", "Dynamic Island")) {
-        IslandPreview()
-        UpdateSection()
-
         // Без службы спец. возможностей острова нет вовсе — это первый шаг
         if (!perms.accessibility) {
             StartCard(onOpen = { Perms.openAccessibility(context) }, onHelp = { open(Screen.INSTRUCTION) })
@@ -164,14 +162,20 @@ fun HomeScreen(open: (Screen) -> Unit) {
 
         ToggleCard(
             Icons.Rounded.PowerSettingsNew,
-            tr("Остров включён", "Island on"),
+            if (s.enabled) tr("Остров включён", "Island on") else tr("Остров выключен", "Island off"),
             when {
+                !s.enabled -> tr("Включите, чтобы показывать активности", "Turn on to show activities")
                 !perms.accessibility -> tr("Сначала включите службу в спец. возможностях", "First turn on the service in Accessibility")
                 running -> tr("Капсула показывается над камерой", "The capsule shows over the camera")
                 else -> tr("Служба запускается…", "The service is starting…")
             },
             s.enabled, color = Tile.Green,
         ) { v -> SettingsRepo.update { copy(enabled = v) } }
+
+        var expanded by remember { mutableStateOf(false) }
+        SettingsPreview(card = expanded, onExpand = { expanded = !expanded })
+        HomeShortcuts(open)
+        UpdateSection()
 
         Group {
             GroupItem(
@@ -347,6 +351,7 @@ fun TestsScreen(onBack: () -> Unit) {
     val demos = remember { demos(context) }
     Page(tr("Проверка", "Try it"), onBack,
         subtitle = tr("Нажмите — пример появится в острове наверху экрана", "Tap — the example shows up in the island at the top of the screen")) {
+        MotionPreview()
         demos.chunked(2).forEach { row ->
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { d ->

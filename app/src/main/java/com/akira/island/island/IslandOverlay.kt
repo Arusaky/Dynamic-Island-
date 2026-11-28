@@ -3,6 +3,8 @@ package com.akira.island.island
 import android.content.Context
 import android.os.Build
 import android.os.SystemClock
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ContentTransform
@@ -235,6 +237,7 @@ fun IslandOverlay(
     val call = if (s.cardCall) selectIslandCall(calls.values) else null
     // Смахнутый входящий не показываем, пока звонит (сбрасывает служба, когда звонить перестали)
     val callHidden by IslandBus.callHidden.collectAsState()
+    var activityOrder = emptyList<String>()
     val acts = buildList {
         // Входящий звонок важнее всего, как на iPhone
         if (call != null && call.incoming && !callHidden) add(Act.CallA(call))
@@ -275,6 +278,7 @@ fun IslandOverlay(
 
         if (s.hideWhenSourceOpen) persistent.removeAll { it.pkg != null && it.pkg == foreground }
 
+        activityOrder = persistent.filterNot { it.transient }.map { it.id }
         // Выбранная активность выходит вперёд, но звонящий таймер всегда главный
         val ringing = (persistent.firstOrNull() as? Act.TimerA)?.t?.ringing == true || call?.incoming == true
         val i = persistent.indexOfFirst { it.id == focus }
@@ -387,7 +391,7 @@ fun IslandOverlay(
             enter = if (s.reduceEffects) fadeIn() else scaleIn(islandSpec(s), initialScale = 0.3f, transformOrigin = top) + fadeIn(tween(120)),
             exit = if (s.reduceEffects) fadeOut() else scaleOut(islandSpec(s), targetScale = 0.3f, transformOrigin = top) + fadeOut(tween(160)),
         ) {
-            CompositionLocalProvider(LocalActivityIds provides acts.filterNot { it.transient }.map { it.id }) {
+            CompositionLocalProvider(LocalActivityIds provides activityOrder) {
                 IslandRow(slot, s, primary, showExpanded, lyrics, battery, bubbleVisible, if (bubbleVisible) secondary else lastSecondary[0], calibrating, onBody, onBubble, onBackdropShape, onBackdropSampler)
             }
         }
@@ -513,6 +517,7 @@ internal fun IslandBody(
     val context = LocalContext.current
     val haptic = rememberHaptic()
     val activities by rememberUpdatedState(LocalActivityIds.current)
+    var swipeDirection by remember { mutableIntStateOf(1) }
     val scope = rememberCoroutineScope()
     val conf = LocalConfiguration.current
     // Раскрытый остров iPhone — 371 pt при ширине экрана 393 pt, то есть по 11 с каждой стороны;
@@ -743,10 +748,15 @@ internal fun IslandBody(
                                 haptic()
                                 Controls.hideIncomingCall()
                             }
-                            !isExpanded && !vertical && abs(dx) > side && settings.swipeActivities && activities.size > 1 -> {
-                                val i = activities.indexOf(act.id).coerceAtLeast(0)
-                                val next = Math.floorMod(i + if (dx < 0) 1 else -1, activities.size)
-                                IslandBus.focus.value = activities[next]
+                            !vertical && abs(dx) > side && settings.swipeActivities &&
+                                activities.count { isExpanded || it != "alarm" } > 1 && !act.transient && !(act is Act.CallA && act.c.incoming) && !(act is Act.TimerA && act.t.ringing) -> {
+                                swipeDirection = if (dx < 0) 1 else -1
+                                val cycle = if (isExpanded) activities else activities.filterNot { it == "alarm" }
+                                val index = cycle.indexOf(act.id)
+                                val next = if (index >= 0) Math.floorMod(index + swipeDirection, cycle.size)
+                                else if (swipeDirection > 0) 0 else cycle.lastIndex
+                                haptic()
+                                IslandBus.focus.value = cycle[next]
                             }
                             !isExpanded && !vertical && abs(dx) > side && act is Act.MediaA && settings.swipeTracks -> {
                                 haptic()
@@ -776,7 +786,11 @@ internal fun IslandBody(
         frames.AnimatedContent(
             contentAlignment = Alignment.TopCenter,
             transitionSpec = {
-                val change = if (s.liquidExpand) EnterTransition.None togetherWith ExitTransition.None else classicChange(s)
+                val change = when {
+                    initialState.expanded && targetState.expanded -> switchExpandedActivity(s, swipeDirection)
+                    s.liquidExpand -> EnterTransition.None togetherWith ExitTransition.None
+                    else -> classicChange(s)
+                }
                 change.using(SizeTransform(clip = true) { _, _ -> islandSpec(s) })
             },
         ) { f ->
@@ -785,7 +799,12 @@ internal fun IslandBody(
             if (f == scene) SideEffect { last[0] = primary }
             val reportWidth = if (f == scene && !f.expanded && onCompactWidth != null)
                 Modifier.onSizeChanged { onCompactWidth(it.width) } else Modifier
-            Box(reportWidth.then(if (s.liquidExpand) liquidFlow(f, frames, widths, s) else classicFlow(s))) {
+            val flow = when {
+                frames.currentState.expanded && frames.targetState.expanded -> Modifier
+                s.liquidExpand -> liquidFlow(f, frames, widths, s)
+                else -> classicFlow(s)
+            }
+            Box(reportWidth.then(flow)) {
                 if (f.expanded) {
                     ExpandedContent(act, s, lyrics, battery, expandedWidth)
                 } else {
@@ -794,6 +813,15 @@ internal fun IslandBody(
             }
         }
     }
+}
+
+private fun switchExpandedActivity(s: IslandSettings, direction: Int): ContentTransform {
+    val duration = (230 * motionScale(s)).toInt().coerceAtLeast(1)
+    val enter = fadeIn(tween(duration))
+    val exit = fadeOut(tween(duration))
+    if (s.reduceEffects) return enter togetherWith exit
+    return (enter + slideInHorizontally(tween(duration)) { direction * it / 9 }) togetherWith
+        (exit + slideOutHorizontally(tween(duration)) { -direction * it / 9 })
 }
 
 /**

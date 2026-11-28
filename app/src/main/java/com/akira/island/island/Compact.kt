@@ -63,6 +63,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -374,16 +375,19 @@ fun CompactRow(
     left: @Composable BoxScope.() -> Unit,
     right: @Composable BoxScope.() -> Unit,
     shrink: Boolean = true,
+    fixedWidth: Dp? = null,
 ) {
     // Капсула с активностью шире спокойной на «Ширину с активностью»; длинный текст раздвинет её сам
     val st = SettingsRepo.state.collectAsState().value
     val baseWidth = st.width.dp + st.activeWidth.dp
     val density = LocalDensity.current
-    SubcomposeLayout { _ ->
+    SubcomposeLayout { constraints ->
         val hPx = h.roundToPx()
         val pad = (h * 0.3f).roundToPx()
         val gapPx = gap.roundToPx()
-        val loose = Constraints(maxWidth = side.roundToPx().coerceAtLeast(1), maxHeight = hPx)
+        val fixed = fixedWidth?.roundToPx()?.coerceIn(0, constraints.maxWidth)
+        val sideLimit = if (fixed == null) side.roundToPx() else (fixed - gapPx) / 2 - pad
+        val loose = Constraints(maxWidth = sideLimit.coerceAtLeast(0), maxHeight = hPx)
         var l = subcompose("l") { Box(contentAlignment = Alignment.Center, content = left) }.first().measure(loose)
         var r = subcompose("r") { Box(contentAlignment = Alignment.Center, content = right) }.first().measure(loose)
         val base = baseWidth.roundToPx()
@@ -391,7 +395,7 @@ fun CompactRow(
         // В узкой капсуле содержимое сначала уменьшается (до 70%) — как будто нарисовано мельче, —
         // и только если и так не помещается, капсулу раздвигает
         val sideRoom = (base - gapPx) / 2 - pad
-        val k = if (shrink && sideNeed > sideRoom && sideRoom > 0) (sideRoom.toFloat() / sideNeed).coerceIn(0.7f, 1f) else 1f
+        val k = if (fixed == null && shrink && sideNeed > sideRoom && sideRoom > 0) (sideRoom.toFloat() / sideNeed).coerceIn(0.7f, 1f) else 1f
         if (k < 1f) {
             val small = Density(density.density * k, density.fontScale)
             l = subcompose("ls") {
@@ -402,7 +406,7 @@ fun CompactRow(
             }.first().measure(loose)
         }
         val needed = 2 * (pad + maxOf(l.width, r.width)) + gapPx
-        val w = maxOf(needed, base)
+        val w = fixed ?: maxOf(needed, base)
         layout(w, hPx) {
             l.place(pad, (hPx - l.height) / 2)
             r.place(w - pad - r.width, (hPx - r.height) / 2)
@@ -1061,7 +1065,7 @@ fun liveTint(kind: LiveKind): Color = when (kind) {
  * Главное из уведомления для узкой капсулы: расстояние до манёвра; у навигатора без расстояния —
  * время в пути, у такси и доставки — заголовок. Если показывать нечего, возвращает null.
  */
-fun liveShort(l: LiveInfo): String? = l.distance
+fun liveShort(l: LiveInfo): String? = if (l.kind == LiveKind.RIDE) l.eta else l.distance
     ?: if (l.kind == LiveKind.NAV) {
         l.eta?.substringAfterLast(" · ")?.takeIf { it.isNotBlank() }
     } else {
@@ -1074,7 +1078,7 @@ fun LiveGlyph(l: LiveInfo, size: Dp, tint: Color) {
     when {
         l.turn != null -> TurnArrow(l.turn, tint, Modifier.size(size))
         l.art != null -> Image(l.art, null, Modifier.size(size).clip(CircleShape))
-        else -> AppIcon(l.icon, size, Ios.navigate, tint)
+        else -> AppIcon(l.icon, size, if (l.kind == LiveKind.RIDE) Icons.Rounded.DirectionsCar else Ios.navigate, tint)
     }
 }
 
@@ -1083,15 +1087,20 @@ fun LiveGlyph(l: LiveInfo, size: Dp, tint: Color) {
 private fun LiveCompact(l: LiveInfo, s: IslandSettings) {
     val h = activeHeight(s)
     val tint = liveTint(l.kind)
-    CompactRow(h, compactGap(s), sideMax(s) * 1.5f,
+    val taxi = l.kind == LiveKind.RIDE
+    val width = if (taxi) {
+        if (s.taxiEtaInCapsule) maxOf(s.width.dp + s.activeWidth.coerceIn(0, 48).dp, compactGap(s) + 92.dp)
+        else maxOf(s.width.dp, compactGap(s) + h * 1.65f)
+    } else null
+    CompactRow(h, compactGap(s), sideMax(s) * 1.5f, fixedWidth = width,
         left = { LiveGlyph(l, if (l.turn != null) h * 0.51f else h * 0.56f, tint) },
         right = {
             val short = liveShort(l)
-            if (short != null) {
-                Text(short, color = tint, fontSize = 17.sp, style = Digits.copy(fontWeight = FontWeight.Bold.island), maxLines = 1,
+            if (short != null && (!taxi || s.taxiEtaInCapsule)) {
+                Text(short, color = tint, fontSize = if (taxi) 13.sp else 17.sp, style = Digits.copy(fontWeight = FontWeight.Bold.island), maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
-            } else {
-                GlowDot(tint, h * 0.22f, !s.reduceEffects)
+            } else if (!taxi || s.taxiEtaInCapsule) {
+                GlowDot(tint, h * 0.22f, animate = !taxi && !s.reduceEffects)
             }
         },
     )
