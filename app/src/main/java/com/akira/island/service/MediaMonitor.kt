@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.scale
 import androidx.palette.graphics.Palette
@@ -263,6 +264,7 @@ class MediaMonitor(private val context: Context) {
             canSeek = (state?.actions ?: 0L) and PlaybackState.ACTION_SEEK_TO != 0L,
             like = like,
             dislike = dislike,
+            artworkSecondaryAccent = if (sameSession) prev?.artworkSecondaryAccent else null,
         )
 
         // На паузе карточка держится ещё немного и уходит, как на iPhone
@@ -340,6 +342,12 @@ class MediaMonitor(private val context: Context) {
         }
     }
 
+    private data class MediaArtwork(
+        val image: ImageBitmap,
+        val accent: Color,
+        val secondaryAccent: Color?,
+    )
+
     private fun loadArt(info: MediaInfo, art: Bitmap?, print: Long?) {
         artKey = info.key
         pendingArt = print
@@ -350,7 +358,7 @@ class MediaMonitor(private val context: Context) {
                 val current = IslandBus.media.value
                 if (current?.key == info.key && IslandBus.screenOn.value && SettingsRepo.current.cardMedia) {
                     lastArt = null
-                    IslandBus.media.value = current.copy(art = null, accent = Tints.Lavender)
+                    IslandBus.media.value = current.copy(art = null, accent = Tints.Lavender, artworkSecondaryAccent = null)
                 }
                 return@launch
             }
@@ -366,7 +374,11 @@ class MediaMonitor(private val context: Context) {
                     } else readable
                     val palette = Palette.from(small).maximumColorCount(16).generate()
                     val rgb = palette.getVibrantColor(palette.getLightVibrantColor(palette.getDominantColor(0xFFC6C3F7.toInt())))
-                    small.asImageBitmap() to Color(rgb)
+                    val secondary = sequenceOf(palette.mutedSwatch, palette.darkVibrantSwatch, palette.dominantSwatch)
+                        .filterNotNull()
+                        .firstOrNull { it.rgb != rgb && it.hsl[1] >= 0.22f && it.hsl[2] >= 0.14f }
+                        ?.let { Color(it.rgb) }
+                    MediaArtwork(small.asImageBitmap(), Color(rgb), secondary)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -376,7 +388,11 @@ class MediaMonitor(private val context: Context) {
             val m = IslandBus.media.value
             if (m?.key == info.key && IslandBus.screenOn.value && SettingsRepo.current.cardMedia) {
                 lastArt = result?.let { print }
-                IslandBus.media.value = m.copy(art = result?.first, accent = result?.second ?: Tints.Lavender)
+                IslandBus.media.value = m.copy(
+                    art = result?.image,
+                    accent = result?.accent ?: Tints.Lavender,
+                    artworkSecondaryAccent = result?.secondaryAccent,
+                )
             }
         }
     }

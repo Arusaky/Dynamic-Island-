@@ -169,6 +169,16 @@ fun ColorsScreen(onBack: () -> Unit) {
             v -> SettingsRepo.update { copy(shadow = v) }
         }
 
+        SectionHeader(tr("Плеер", "Player"))
+        GroupToggle(Pos.Single, Icons.Rounded.Gradient, tr("Градиент плеера", "Player gradient"),
+            tr("В раскрытой карточке фон плавно меняет цвет вместе с обложкой",
+                "The expanded player's background follows the artwork colors"),
+            s.playerGradient, color = Tile.Purple) { enabled ->
+            card = true
+            scene = PreviewScene.MUSIC
+            SettingsRepo.update { copy(playerGradient = enabled) }
+        }
+
         SectionHeader(tr("Основные кнопки", "Main controls"))
         ChoiceStrip(listOf(false, true), s.actionColorEnabled, { if (it) tr("Свой цвет", "Custom color") else tr("Стандартные цвета", "Default colors") }) {
             enabled -> card = true; scene = PreviewScene.TIMER; SettingsRepo.update { copy(actionColorEnabled = enabled) }

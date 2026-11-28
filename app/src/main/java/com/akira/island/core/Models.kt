@@ -25,6 +25,7 @@ data class MediaInfo(
     /** «Нравится» и «Не нравится» из самого плеера (Яндекс Музыка, YouTube Music и др.), если он их даёт */
     val like: PlayerAction? = null,
     val dislike: PlayerAction? = null,
+    val artworkSecondaryAccent: Color? = null,
 ) {
     fun positionAt(now: Long): Long {
         val p = if (playing) positionMs + ((now - positionTime) * speed).toLong() else positionMs

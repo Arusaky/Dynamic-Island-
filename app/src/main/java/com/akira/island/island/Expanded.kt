@@ -269,6 +269,7 @@ private fun ago(ms: Long): String {
 @Composable
 private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, battery: BatteryInfo) {
     val context = LocalContext.current
+    val secondaryText = if (s.playerGradient && !s.textColorEnabled) Color.White.copy(alpha = 0.76f) else Tints.Gray
     Column {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val narrow = maxWidth < 260.dp
@@ -286,7 +287,7 @@ private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, batt
                             modifier = Modifier.marqueeFade().basicMarquee(iterations = Int.MAX_VALUE))
                         if (m.artist.isNotBlank()) {
                             Spacer(Modifier.height(3.dp))
-                            Text(m.artist, color = Tints.Gray, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(m.artist, color = secondaryText, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     Spacer(Modifier.width(if (narrow) 6.dp else 10.dp))
@@ -301,17 +302,17 @@ private fun MediaExpanded(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, batt
             }
         }
 
-        MediaTimeline(m, s, lyrics)
-        MediaControls(m.pkg, m.like, m.dislike, m.playing)
+        MediaTimeline(m, s, lyrics, secondaryText)
+        MediaControls(m.pkg, m.like, m.dislike, m.playing, s.playerGradient)
     }
 }
 
 /** Only the lyric/timeline subtree ticks; artwork, title and playback controls stay outside it. */
 @Composable
-private fun MediaTimeline(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?) {
+private fun MediaTimeline(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, secondaryText: Color) {
     val clock = rememberNowState(if (s.reduceEffects) 1_000 else 100, active = m.playing)
     MediaLyrics(m, s, lyrics, clock)
-    MediaSeek(m, clock)
+    MediaSeek(m, clock, secondaryText)
 }
 
 @Composable
@@ -329,12 +330,12 @@ private fun MediaLyrics(m: MediaInfo, s: IslandSettings, lyrics: Lyrics?, clock:
 }
 
 @Composable
-private fun MediaSeek(m: MediaInfo, clock: State<Long>) {
+private fun MediaSeek(m: MediaInfo, clock: State<Long>, secondaryText: Color) {
     val pos = m.positionAt(rememberNow(1_000, active = m.playing))
     // Время по краям полосы, как на iPhone и в ролике
     Spacer(Modifier.height(14.dp))
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(formatDuration(pos), color = Tints.Gray, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island),
+        Text(formatDuration(pos), color = secondaryText, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island),
             maxLines = 1, softWrap = false, modifier = Modifier.widthIn(min = 34.dp))
         SeekBar(
             fraction = { if (m.durationMs > 0) m.positionAt(clock.value).toFloat() / m.durationMs else 0f },
@@ -345,7 +346,7 @@ private fun MediaSeek(m: MediaInfo, clock: State<Long>) {
         )
         Text(
             if (m.durationMs > 0) "-" + formatDuration(m.durationMs - pos) else "",
-            color = Tints.Gray, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island), textAlign = TextAlign.End,
+            color = secondaryText, fontSize = 11.sp, style = Digits.copy(fontWeight = FontWeight.Normal.island), textAlign = TextAlign.End,
             maxLines = 1, softWrap = false, modifier = Modifier.widthIn(min = 38.dp),
         )
     }
@@ -356,7 +357,7 @@ private fun MediaSeek(m: MediaInfo, clock: State<Long>) {
  * а кнопки при этом не перерисовываются.
  */
 @Composable
-private fun MediaControls(pkg: String, like: PlayerAction?, dislike: PlayerAction?, playing: Boolean) {
+private fun MediaControls(pkg: String, like: PlayerAction?, dislike: PlayerAction?, playing: Boolean, artworkBackground: Boolean) {
     val context = LocalContext.current
     val ratings: @Composable () -> Unit = {
         like?.let { a ->
@@ -375,7 +376,11 @@ private fun MediaControls(pkg: String, like: PlayerAction?, dislike: PlayerActio
         val transport: @Composable () -> Unit = {
             Row(horizontalArrangement = Arrangement.spacedBy(if (narrow) 8.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
                 RoundButton(Ios.back, size = if (narrow) 36.dp else 44.dp, bg = Color.Transparent, iconScale = 0.636f) { Controls.prev(pkg) }
-                RoundButton(if (playing) Ios.pause else Ios.play, size = if (narrow) 44.dp else 48.dp, bg = Color.Transparent, iconScale = 0.667f) { Controls.playPause(pkg) }
+                RoundButton(
+                    if (playing) Ios.pause else Ios.play, size = if (narrow) 44.dp else 48.dp,
+                    bg = if (artworkBackground) Color.White.copy(alpha = 0.14f) else Color.Transparent,
+                    iconScale = 0.667f,
+                ) { Controls.playPause(pkg) }
                 RoundButton(Ios.forward, size = if (narrow) 36.dp else 44.dp, bg = Color.Transparent, iconScale = 0.636f) { Controls.next(pkg) }
             }
         }

@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import kotlin.math.abs
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -26,7 +27,8 @@ enum class PreviewScene { IDLE, MUSIC, MESSAGE, TIMER, RECORDING, TAXI, CHARGING
 fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, event: Notice? = null, notificationStyle: Boolean = false, twoActivities: Boolean = false,
     light: GlassTilt = GlassTilt.Zero, onLight: ((GlassTilt) -> Unit)? = null, onSwipe: ((Int) -> Unit)? = null) {
     val sampleMedia = remember { MediaInfo("preview", "", "Night Drive", "Alex · Demo", null, null, Tints.Lavender,
-        180_000, 72_000, SystemClock.elapsedRealtime(), 1f, true, true) }
+        180_000, 72_000, SystemClock.elapsedRealtime(), 1f, true, true,
+        artworkSecondaryAccent = Color(0xFFFF829D)) }
     val media = sampleMedia.copy(playing = !s.reduceEffects)
     val timer = remember { TimerState(300_000, SystemClock.elapsedRealtime() + 192_000, pausedLeft = 192_000) }
     val message = remember { AppMessage("preview", "", "Messages", tr("Привет! Во сколько встречаемся?", "Hi! What time are we meeting?"), null, null, null) }

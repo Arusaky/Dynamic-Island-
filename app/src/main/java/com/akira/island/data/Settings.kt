@@ -452,6 +452,7 @@ data class IslandSettings(
     val expandedOutlineLeftWidth: Float = -1f,
 
     val bottomGradient: Int = 0,
+    val playerGradient: Boolean = true,
     val messageIconMode: MessageIconMode = MessageIconMode.DEFAULT,
     /** Kept for settings saved before the three-position choice was added. */
     val messageIconRight: Boolean = false,

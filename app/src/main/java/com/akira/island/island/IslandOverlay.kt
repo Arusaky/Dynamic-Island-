@@ -564,9 +564,15 @@ internal fun IslandBody(
     val corner = animateDpAsState(cornerTarget, islandSpec(s), label = "corner")
     val shape = remember(corner, s.notch, s.notchTopRadius) { AnimatedIslandShape(corner, s.notch, s.notchTopRadius) }
     val accent = primary.surfaceAccent()
+    val player = (primary as? Act.MediaA)?.m
+    val playerBackdrop = playerGradient(
+        player.takeIf { expanded && s.playerGradient && !calibrating },
+        glass = s.liquidGlass,
+        animated = !s.reduceEffects && s.expandStyle != ExpandStyle.INSTANT,
+    )
 
     // Свечение цвета обложки, пока играет музыка («Эффекты»): с треком цвет плавно меняется, с паузой гаснет
-    val playingArt = (primary as? Act.MediaA)?.m?.takeIf { it.playing }?.accent
+    val playingArt = player?.takeIf { it.playing }?.accent
     val lastArt = remember { arrayOf(Color.White) }
     if (playingArt != null) lastArt[0] = playingArt
     val glowOn = s.fxGlow && !s.reduceEffects && !calibrating && playingArt != null
@@ -683,7 +689,7 @@ internal fun IslandBody(
             .then(
                 if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)
                 else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value },
-                    sheen = { sheen.value }, previewBackdrop = materialExample),
+                    sheen = { sheen.value }, previewBackdrop = materialExample, activityBackdrop = playerBackdrop),
             )
             .then(if (!calibrating && banner?.effect == NoticeEffect.CHARGING)
                 chargingWave(s, banner.id) else Modifier)
