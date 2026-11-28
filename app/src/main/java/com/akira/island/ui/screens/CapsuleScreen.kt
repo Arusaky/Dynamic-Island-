@@ -24,6 +24,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.akira.island.data.IslandFont
 import com.akira.island.island.IslandType
 import com.akira.island.island.island
+import com.akira.island.ui.setup.CapsuleSizeControls
+import com.akira.island.ui.setup.MaterialPicker
 import com.akira.island.ui.posOf
 import java.io.File
 import kotlin.math.roundToInt
@@ -91,15 +93,15 @@ fun CapsuleScreen(open: (Screen) -> Unit) {
         var expanded by rememberSaveable { mutableStateOf(false) }
         SettingsPreview(card = expanded, onExpand = { expanded = !expanded })
 
-        SectionHeader(tr("Положение и размер", "Position and size"))
+        SectionHeader(tr("Капсула и карточки", "Capsule and cards"))
         Group {
-            GroupItem(Pos.First, Icons.Rounded.OpenWith, tr("Положение и размер", "Position and size"),
-                trf("Капсула {0}×{1} dp — подогнать под камеру", "Capsule {0}×{1} dp — fit it to the camera", s.width, s.height),
+            GroupItem(Pos.First, Icons.Rounded.OpenWith, tr("Положение у камеры", "Camera position"),
+                tr("Смещение острова и форма выреза", "Island offsets and camera cutout"),
                 color = Tile.Indigo, onClick = { open(Screen.SIZE) }) { Arrow() }
             GroupItem(Pos.Last, Icons.Rounded.SwapHoriz, tr("Размер и форма", "Size and shape"),
                 trf(
-                    "С активностью, раскрытый остров и уведомления: ширина {0}%, текст {1}%",
-                    "With activity, expanded island and notifications: width {0}%, text {1}%", s.expandedWidthPercent, s.contentScale,
+                    "Капсула {0}×{1} dp, форма карточек и материал",
+                    "Capsule {0}×{1} dp, card shape and material", s.width, s.height,
                 ),
                 color = Tile.Purple, onClick = { open(Screen.LOOK) }) { Arrow() }
         }
@@ -143,10 +145,13 @@ fun LookScreen(onBack: () -> Unit) {
     var scene by rememberSaveable { mutableStateOf(PreviewScene.MUSIC) }
     Page(tr("Размер и форма", "Size and shape"), onBack, preview = { SettingsPreview(card, scene, onScene = { scene = it }) }) {
         ChoiceStrip(listOf(false, true), card, { if (it) tr("Карточка", "Card") else tr("Капсула", "Capsule") }) { card = it }
+        MaterialPicker(s)
         if (!card) {
+            SectionHeader(tr("Базовый размер", "Base size"))
+            CapsuleSizeControls(s)
             SectionHeader(tr("Капсула с активностью", "Active capsule"))
-            SettingsHint(tr("Прибавка к размеру пустой капсулы. Положение и базовый размер настраиваются на экране «Положение и размер».",
-                "Extra size while an activity is present. Set the base size and position in Position and size."))
+            SettingsHint(tr("Прибавка к базовому размеру, пока остров показывает активность.",
+                "Extra size while an activity is present."))
             Group {
                 GroupSlider(Pos.First, Icons.Rounded.LineWeight, tr("Добавить высоту", "Extra height"), s.activeExtra.toFloat(), 0f..14f, "+${s.activeExtra} dp", color = Tile.Purple) {
                     v -> SettingsRepo.update { copy(activeExtra = v.toInt()) }

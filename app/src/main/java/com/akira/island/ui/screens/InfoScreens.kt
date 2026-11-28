@@ -106,10 +106,10 @@ fun InstructionScreen(onBack: () -> Unit) {
             ))
         Step(5, tr("Поставьте капсулу над камерой", "Place the capsule over the camera"),
             tr(
-                "Вкладка «Оформление» → «Положение и размер». Пока экран открыт, остров красный: " +
-                    "сдвиньте его, пока красное не окажется ровно над камерой, подберите ширину и высоту и нажмите «Сохранить».",
-                "Appearance tab → Position and size. While the screen is open, the island is red: move it until the red sits " +
-                    "exactly over the camera, pick the width and height and tap “Save”.",
+                "Во вкладке «Оформление» задайте ширину и высоту в разделе «Размер и форма». " +
+                    "Затем откройте «Положение у камеры», сдвиньте красный остров над камерой и нажмите «Сохранить».",
+                "In Appearance, set the width and height under Size and shape. " +
+                    "Then open Camera position, move the red island over the camera, and tap Save.",
             ))
         Step(6, tr("Батарея (Xiaomi, Huawei, Samsung…)", "Battery (Xiaomi, Huawei, Samsung…)"),
             tr(

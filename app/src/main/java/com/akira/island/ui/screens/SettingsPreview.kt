@@ -93,7 +93,7 @@ fun SettingsPreview(
             }
         }
         val hint = when {
-            card && scene == PreviewScene.MUSIC && event == null && eventShown && s.playerGradient && !s.reduceEffects ->
+            card && scene == PreviewScene.MUSIC && event == null && eventShown && s.playerGradient ->
                 if (onSwipe != null) tr("Ведите пальцем, чтобы двигать свет. Быстрый свайп меняет событие.",
                     "Drag to move the light. Swipe quickly to switch events.")
                 else tr("Проведите по плееру — свет последует за пальцем", "Drag across the player to move the light")

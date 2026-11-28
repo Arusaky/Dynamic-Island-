@@ -54,7 +54,7 @@ fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, eve
     val previewLabel = tr("Живой пример — действия телефона отключены", "Live preview — phone actions are disabled")
     val lightCallback by rememberUpdatedState(onLight)
     val swipeCallback by rememberUpdatedState(onSwipe)
-    val reactivePlayer by rememberUpdatedState(act is Act.MediaA && card && s.playerGradient && !s.reduceEffects)
+    val reactivePlayer by rememberUpdatedState(act is Act.MediaA && card && s.playerGradient)
     Box(Modifier.clearAndSetSemantics {
         contentDescription = previewLabel
         testTag = "appearance-preview"

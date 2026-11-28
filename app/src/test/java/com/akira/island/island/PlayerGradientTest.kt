@@ -37,24 +37,20 @@ class PlayerGradientTest {
     }
 
     @Test fun idleLightMovesAndReturnsToTheSamePointEachCycle() {
-        val touch = Offset.Zero
-        val start = playerLightPosition(0L, touch, 0f)
-        assertNotEquals(start, playerLightPosition(2_000L, touch, 0f))
-        assertEquals(start, playerLightPosition(8_000L, touch, 0f))
+        val start = playerAmbientPosition(0L)
+        assertNotEquals(start, playerAmbientPosition(2_000L))
+        assertEquals(start, playerAmbientPosition(8_000L))
     }
 
-    @Test fun lightFollowsTheLatestTouchAndBlendsBackToIdleOnRelease() {
-        val frame = 2_000L
-        val first = Offset(0.25f, 0.5f)
-        val last = Offset(0.8f, 0.25f)
-        val idle = playerLightPosition(frame, first, 0f)
-        assertEquals(first, playerLightPosition(frame, first, 1f))
-        val dragged = playerLightPosition(frame, last, 1f)
-        assertEquals(last.x, dragged.x, 0.0001f)
-        assertEquals(last.y, dragged.y, 0.0001f)
-        val returning = playerLightPosition(frame, last, 0.5f)
-        assertEquals((idle.x + last.x) / 2f, returning.x, 0.0001f)
-        assertEquals((idle.y + last.y) / 2f, returning.y, 0.0001f)
-        assertEquals(idle, playerLightPosition(frame, last, 0f))
+    @Test fun aQuickTapLightsUpEvenWhenDownAndUpHappenBeforeDrawing() {
+        val point = Offset(0.8f, 0.25f)
+        val pressed = PlayerLightTouch(point, pressed = true)
+        val released = pressed.release(1_020L)
+        assertEquals(point, released.position)
+        assertEquals(1f, playerTouchStrength(pressed, 1_000L, 560), 0f)
+        assertTrue(playerTouchStrength(released, 1_036L, 560) > 0.99f)
+        assertEquals(0.5f, playerTouchStrength(released, 1_300L, 560), 0.001f)
+        assertEquals(0f, playerTouchStrength(released, 1_580L, 560), 0f)
+        assertEquals(released, released.release(1_400L))
     }
 }

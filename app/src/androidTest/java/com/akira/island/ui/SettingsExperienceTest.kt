@@ -1,6 +1,7 @@
 package com.akira.island.ui
 
 import androidx.compose.ui.test.*
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -85,6 +86,53 @@ class SettingsExperienceTest {
         compose.onNodeWithText("Тень").performScrollTo()
         compose.onNodeWithTag("appearance-preview").assertIsDisplayed()
         compose.runOnIdle { assertTrue(IslandBus.noticeHold.value) }
+    }
+
+    @Test fun sizeAndMaterialControlsHaveOneHome() {
+        compose.onAllNodesWithText("Оформление").onLast().performClick()
+        compose.onNodeWithText("Размер и форма").performScrollTo().performClick()
+        compose.onAllNodesWithText("Материал острова").assertCountEquals(1)
+        compose.onAllNodesWithText("Ширина капсулы").assertCountEquals(1)
+        compose.onAllNodesWithText("Высота капсулы").assertCountEquals(1)
+        compose.onNodeWithText("Ширина капсулы").performScrollTo()
+        screenshot("size-and-material")
+        compose.onNodeWithContentDescription("Назад").performClick()
+
+        compose.onNodeWithText("Положение у камеры").performScrollTo().performClick()
+        compose.onNodeWithText("Ширина капсулы").assertDoesNotExist()
+        compose.onNodeWithText("Высота капсулы").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Назад").performClick()
+
+        compose.onNodeWithText("Цвет и рамка").performScrollTo().performClick()
+        compose.onNodeWithText("Материал острова").assertDoesNotExist()
+        compose.onNodeWithText("Стекло").assertDoesNotExist()
+    }
+
+    @Test fun expandedPreviewLightFollowsTouchWithReducedEffects() {
+        compose.onAllNodesWithText("Оформление").onLast().performClick()
+        compose.onNodeWithText("Эффекты").performScrollTo().performClick()
+        compose.onNodeWithText("Раскрыть").performScrollTo().performClick()
+        val preview = compose.onNodeWithTag("appearance-preview")
+        preview.performScrollTo().assertIsDisplayed()
+
+        preview.performTouchInput { down(Offset(width * 0.25f, height * 0.60f)) }
+        val left = preview.captureToImage().asAndroidBitmap()
+        preview.performTouchInput { moveTo(Offset(width * 0.75f, height * 0.60f)) }
+        val right = preview.captureToImage().asAndroidBitmap()
+        preview.performTouchInput { up() }
+
+        fun brightness(image: Bitmap, x: Float): Float {
+            val cx = (image.width * x).toInt()
+            val cy = (image.height * 0.60f).toInt()
+            var total = 0
+            for (dy in -5..5) for (dx in -5..5) {
+                val pixel = image.getPixel(cx + dx, cy + dy)
+                total += android.graphics.Color.red(pixel) + android.graphics.Color.green(pixel) + android.graphics.Color.blue(pixel)
+            }
+            return total / 363f
+        }
+        assertTrue(brightness(left, 0.25f) > brightness(right, 0.25f) + 5f)
+        assertTrue(brightness(right, 0.75f) > brightness(left, 0.75f) + 5f)
     }
 
     @Test fun systemEventsHaveOneHomeAndHardwareReadings() {

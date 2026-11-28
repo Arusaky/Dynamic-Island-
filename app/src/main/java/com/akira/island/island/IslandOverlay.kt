@@ -567,15 +567,17 @@ internal fun IslandBody(
     val accent = primary.surfaceAccent()
     val player = (primary as? Act.MediaA)?.m
     val gradientMedia = player.takeIf { expanded && s.playerGradient && !calibrating }
-    val playerLightActive = gradientMedia != null && !s.reduceEffects
-    val playerTouch = remember { mutableStateOf(PlayerLightTouch()) }
+    val playerLightActive = gradientMedia != null
+    val playerTouch = remember(playerLightActive) { mutableStateOf(PlayerLightTouch()) }
     val playerBackdrop = playerGradient(
         gradientMedia,
         glass = s.liquidGlass,
         animated = !s.reduceEffects && s.expandStyle != ExpandStyle.INSTANT,
-        live = playerLightActive,
-        touch = playerTouch,
+        moving = playerLightActive && !s.reduceEffects,
     )
+
+    val playerHighlight = if (gradientMedia != null)
+        Modifier.playerTouchHighlight(gradientMedia, playerTouch, s.reduceEffects) else Modifier
 
     // Свечение цвета обложки, пока играет музыка («Эффекты»): с треком цвет плавно меняется, с паузой гаснет
     val playingArt = player?.takeIf { it.playing }?.accent
@@ -695,7 +697,8 @@ internal fun IslandBody(
             .then(
                 if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)
                 else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value },
-                    sheen = { sheen.value }, previewBackdrop = materialExample, activityBackdrop = playerBackdrop),
+                    sheen = { sheen.value }, previewBackdrop = materialExample, activityBackdrop = playerBackdrop,
+                    touchHighlight = playerHighlight),
             )
             .then(if (!calibrating && banner?.effect == NoticeEffect.CHARGING)
                 chargingWave(s, banner.id) else Modifier)
@@ -717,18 +720,18 @@ internal fun IslandBody(
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             if (!preview) IslandBus.lastTouch = SystemClock.elapsedRealtime()
                             if (playerLightActive) {
-                                val finger = if (pointer == null) event.changes.firstOrNull { it.pressed && !it.previousPressed }
+                                val finger = if (pointer == null) event.changes.firstOrNull { it.pressed }
                                     else event.changes.firstOrNull { it.id == pointer && it.pressed }
                                 pointer = finger?.id
                                 if (finger != null) {
                                     playerTouch.value = PlayerLightTouch(playerTouchPosition(finger.position, size), pressed = true)
                                 } else if (playerTouch.value.pressed) {
-                                    playerTouch.value = playerTouch.value.copy(pressed = false)
+                                    playerTouch.value = playerTouch.value.release(SystemClock.uptimeMillis())
                                 }
                             }
                         }
                     } finally {
-                        if (playerLightActive) playerTouch.value = playerTouch.value.copy(pressed = false)
+                        if (playerLightActive) playerTouch.value = playerTouch.value.release(SystemClock.uptimeMillis())
                     }
                 }
             })
@@ -991,6 +994,8 @@ private fun GraphicsLayerScope.blurLayer(dp: Float, cache: BlurEffectCache) {
 
 private fun onTap(context: Context, act: Act, expanded: Boolean, s: IslandSettings) {
     if (expanded) {
+        // Background taps light up the expanded player. Swipe up or touch outside to collapse.
+        if (act is Act.MediaA && s.playerGradient) return
         Controls.collapse()
         return
     }

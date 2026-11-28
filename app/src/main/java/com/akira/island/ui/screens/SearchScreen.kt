@@ -27,7 +27,10 @@ private data class SearchItem(val title: String, val section: String, val screen
 fun SearchScreen(query: String, onQuery: (String) -> Unit, onBack: () -> Unit, open: (Screen) -> Unit) {
     val keyboard = LocalSoftwareKeyboardController.current
     val items = remember(Lang.code) { searchCatalog() }
-    val found = remember(query, items) { items.filter { matchesSettingsSearch(query, "${it.title} ${it.section} ${it.words}") } }
+    val found = remember(query, items) {
+        items.filter { matchesSettingsSearch(query, "${it.title} ${it.section} ${it.words}") }
+            .distinctBy(SearchItem::screen)
+    }
     Page(tr("Поиск по настройкам", "Search settings"), onBack, preview = {
         OutlinedTextField(query, { onQuery(it.take(80)) }, modifier = Modifier.fillMaxWidth(), singleLine = true,
             label = { Text(tr("Название или функция", "Name or feature")) },
@@ -53,12 +56,12 @@ private fun searchCatalog(): List<SearchItem> {
     val appearance = tr("Оформление", "Appearance")
     val features = tr("Функции", "Features")
     return listOf(
-        SearchItem(tr("Положение и размер", "Position and size"), appearance, Screen.SIZE, "камера вырез капля отступ сверху смещение notch camera ширина высота top offset position width height"),
-        SearchItem(tr("Размер и форма", "Size and shape"), appearance, Screen.LOOK, "радиус скругление углы карточка текст icons radius rounded corners card scale"),
+        SearchItem(tr("Положение у камеры", "Camera position"), appearance, Screen.SIZE, "камера вырез капля отступ сверху смещение notch camera top offset position"),
+        SearchItem(tr("Размер и форма", "Size and shape"), appearance, Screen.LOOK, "радиус скругление углы карточка текст ширина высота размер капсулы материал стекло заливка icons radius rounded corners card scale capsule width height material glass solid"),
         SearchItem(tr("Цвет и рамка", "Color and border"), appearance, Screen.COLORS, "заливка контур стороны прозрачность тень градиент fill outline opacity shadow gradient"),
         SearchItem(tr("Градиент плеера", "Player gradient"), appearance, Screen.COLORS, "фон обложка музыка artwork background music"),
         SearchItem(tr("Цвет текста", "Text color"), appearance, Screen.COLORS, "цвет шрифт текст капсула карточка сводка font text color capsule card brief"),
-        SearchItem("Liquid Glass", appearance, Screen.COLORS, "стекло плотность блики прозрачность glass reflections density material"),
+        SearchItem(tr("Размытие стекла", "Glass blur"), appearance, Screen.COLORS, "стекло плотность блики прозрачность glass blur reflections density opacity"),
         SearchItem(tr("Шрифт острова", "Island font"), appearance, Screen.FONT, "системный жирный начертание текст font bold typeface text"),
         SearchItem(tr("Раскрытие острова", "Island expansion"), appearance, Screen.ANIM, "жидкое анимация пружина упругость скорость liquid expansion animation spring motion speed elasticity"),
         SearchItem(tr("Эффекты", "Effects"), appearance, Screen.EFFECTS, "эквалайзер кадры батарея свечение blur fps frame rate battery glow equalizer"),

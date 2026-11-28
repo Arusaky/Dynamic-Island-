@@ -23,6 +23,7 @@ fun Modifier.islandSurface(
     sheen: () -> Float = { -1f },
     previewBackdrop: Modifier = Modifier,
     activityBackdrop: Modifier = Modifier,
+    touchHighlight: Modifier = Modifier,
 ): Modifier {
     val outline = s.resolveOutline(card)
     val base = Color(if (card && s.expandedColorEnabled) s.expandedColor else s.color)
@@ -45,5 +46,6 @@ fun Modifier.islandSurface(
             sheen = { if (s.reduceEffects) -1f else sheen() }) else Modifier.background(fill))
         .then(activityBackdrop)
         .then(if (s.bottomGradient > 0) Modifier.background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = s.bottomGradient.coerceIn(0, 80) / 100f)))) else Modifier)
+        .then(touchHighlight)
         .then(if (outline.visible) Modifier.islandEdgeOutline(shape, color, outline.edges[0].dp, outline.edges[1].dp, outline.edges[2].dp, outline.edges[3].dp) else Modifier)
 }
