@@ -84,6 +84,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -565,10 +566,15 @@ internal fun IslandBody(
     val shape = remember(corner, s.notch, s.notchTopRadius) { AnimatedIslandShape(corner, s.notch, s.notchTopRadius) }
     val accent = primary.surfaceAccent()
     val player = (primary as? Act.MediaA)?.m
+    val gradientMedia = player.takeIf { expanded && s.playerGradient && !calibrating }
+    val playerLightActive = gradientMedia != null && !s.reduceEffects
+    val playerTouch = remember { mutableStateOf(PlayerLightTouch()) }
     val playerBackdrop = playerGradient(
-        player.takeIf { expanded && s.playerGradient && !calibrating },
+        gradientMedia,
         glass = s.liquidGlass,
         animated = !s.reduceEffects && s.expandStyle != ExpandStyle.INSTANT,
+        live = playerLightActive,
+        touch = playerTouch,
     )
 
     // Свечение цвета обложки, пока играет музыка («Эффекты»): с треком цвет плавно меняется, с паузой гаснет
@@ -703,16 +709,30 @@ internal fun IslandBody(
                     Modifier
                 },
             )
-            .then(if (preview) Modifier else Modifier
-            // Любое касание — раскрытый остров не свернётся сам из-под пальца
-            .pointerInput(Unit) {
+            .then(if (preview && !playerLightActive) Modifier else Modifier.pointerInput(preview, playerLightActive) {
                 awaitPointerEventScope {
-                    while (true) {
-                        awaitPointerEvent(PointerEventPass.Initial)
-                        IslandBus.lastTouch = SystemClock.elapsedRealtime()
+                    var pointer: PointerId? = null
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (!preview) IslandBus.lastTouch = SystemClock.elapsedRealtime()
+                            if (playerLightActive) {
+                                val finger = if (pointer == null) event.changes.firstOrNull { it.pressed && !it.previousPressed }
+                                    else event.changes.firstOrNull { it.id == pointer && it.pressed }
+                                pointer = finger?.id
+                                if (finger != null) {
+                                    playerTouch.value = PlayerLightTouch(playerTouchPosition(finger.position, size), pressed = true)
+                                } else if (playerTouch.value.pressed) {
+                                    playerTouch.value = playerTouch.value.copy(pressed = false)
+                                }
+                            }
+                        }
+                    } finally {
+                        if (playerLightActive) playerTouch.value = playerTouch.value.copy(pressed = false)
                     }
                 }
-            }
+            })
+            .then(if (preview) Modifier else Modifier
             .pointerInput(s.doubleTapAction != TapAction.NOTHING, s.longPressAction != TapAction.NOTHING) {
                 val doubleOn = settings.doubleTapAction != TapAction.NOTHING
                 val longOn = settings.longPressAction != TapAction.NOTHING

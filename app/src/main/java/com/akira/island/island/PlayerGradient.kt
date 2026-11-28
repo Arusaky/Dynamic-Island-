@@ -1,9 +1,12 @@
 package com.akira.island.island
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -13,13 +16,30 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.IntSize
 import com.akira.island.core.MediaInfo
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 private val PlayerBackdropDark = Color(0xFF110E18)
 
 internal data class PlayerGradientColors(val main: Color, val highlight: Color)
+internal data class PlayerLightTouch(val position: Offset = Offset(0.5f, 0.5f), val pressed: Boolean = false)
+
+internal fun playerTouchPosition(position: Offset, bounds: IntSize): Offset = Offset(
+    (position.x / bounds.width.coerceAtLeast(1)).coerceIn(0f, 1f),
+    (position.y / bounds.height.coerceAtLeast(1)).coerceIn(0f, 1f),
+)
+
+internal fun playerLightPosition(timeMs: Long, touch: Offset, strength: Float): Offset {
+    val phase = (timeMs % 8_000L) * (2 * PI / 8_000)
+    val idle = Offset(0.60f + 0.23f * cos(phase).toFloat(), 0.78f + 0.17f * sin(phase).toFloat())
+    return idle + (touch - idle) * strength
+}
 
 internal fun playerGradientColors(accent: Color, secondary: Color?): PlayerGradientColors {
     val base = accent.takeUnless { it == Color.Unspecified } ?: Color(0xFFC6C3F7)
@@ -47,7 +67,13 @@ private fun darkenForPlayer(color: Color, peakLimit: Float): Color {
  * The glass version stays translucent. The cached brushes change only with color or size.
  */
 @Composable
-internal fun playerGradient(media: MediaInfo?, glass: Boolean, animated: Boolean): Modifier {
+internal fun playerGradient(
+    media: MediaInfo?,
+    glass: Boolean,
+    animated: Boolean,
+    live: Boolean,
+    touch: State<PlayerLightTouch>,
+): Modifier {
     val colors = remember(media?.accent, media?.artworkSecondaryAccent) {
         media?.let { playerGradientColors(it.accent, it.artworkSecondaryAccent) }
     }
@@ -67,6 +93,15 @@ internal fun playerGradient(media: MediaInfo?, glass: Boolean, animated: Boolean
         derivedStateOf { main.value.alpha > 0.001f || highlight.value.alpha > 0.001f }
     }
     if (!visible && colors == null) return Modifier
+
+    val time = rememberFxClock(live)
+    val pressed by remember(touch) { derivedStateOf { touch.value.pressed } }
+    val following = live && pressed
+    val strength = animateFloatAsState(
+        if (following) 1f else 0f,
+        if (live) tween(if (following) 125 else 480, easing = FastOutSlowInEasing) else snap(),
+        label = "player light touch",
+    )
     return Modifier.drawWithCache {
         val base = main.value
         val glow = highlight.value
@@ -77,14 +112,31 @@ internal fun playerGradient(media: MediaInfo?, glass: Boolean, animated: Boolean
             0.80f to base,
             1f to lerp(base, glow, 0.55f),
         )
-        val highlightBehindControls = Brush.radialGradient(
-            listOf(glow.copy(alpha = glow.alpha * 0.65f), glow.copy(alpha = 0f)),
-            center = Offset(size.width * 0.76f, size.height * 0.94f),
-            radius = maxOf(1f, size.width * 0.68f, size.height * 0.50f),
+        val radius = maxOf(1f, size.width * 0.67f, size.height * 0.65f)
+        val halo = Brush.radialGradient(
+            0f to glow.copy(alpha = glow.alpha),
+            0.55f to glow.copy(alpha = glow.alpha * 0.42f),
+            1f to glow.copy(alpha = 0f),
+            center = Offset.Zero,
+            radius = radius,
+        )
+        val focusRadius = radius * 0.62f
+        val focusColor = lerp(glow, Color(0xFF9A89C0), 0.22f)
+        val focus = Brush.radialGradient(
+            listOf(focusColor.copy(alpha = glow.alpha * 0.64f), focusColor.copy(alpha = 0f)),
+            center = Offset.Zero,
+            radius = focusRadius,
         )
         onDrawBehind {
             drawRect(vertical)
-            drawRect(highlightBehindControls)
+            val amount = if (live) strength.value else 0f
+            val center = if (live) playerLightPosition(time.value, touch.value.position, amount)
+                else Offset(0.76f, 0.94f)
+            // Move cached shaders in the draw pass while the card and its controls keep their layout.
+            translate(size.width * center.x, size.height * center.y) {
+                drawCircle(halo, center = Offset.Zero, radius = radius, alpha = 0.69f + amount * 0.31f)
+                if (amount > 0f) drawCircle(focus, center = Offset.Zero, radius = focusRadius, alpha = amount)
+            }
         }
     }
 }

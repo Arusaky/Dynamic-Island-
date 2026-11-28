@@ -54,6 +54,7 @@ fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, eve
     val previewLabel = tr("Живой пример — действия телефона отключены", "Live preview — phone actions are disabled")
     val lightCallback by rememberUpdatedState(onLight)
     val swipeCallback by rememberUpdatedState(onSwipe)
+    val reactivePlayer by rememberUpdatedState(act is Act.MediaA && card && s.playerGradient && !s.reduceEffects)
     Box(Modifier.clearAndSetSemantics {
         contentDescription = previewLabel
         testTag = "appearance-preview"
@@ -61,19 +62,24 @@ fun AppearancePreview(s: IslandSettings, card: Boolean, scene: PreviewScene, eve
         val threshold = 24.dp.toPx()
         awaitPointerEventScope {
             var start: Offset? = null
+            var startMs = 0L
             try {
                 while (true) {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
                     val finger = event.changes.firstOrNull { it.pressed }
                     if (finger != null) {
-                        if (start == null) start = finger.position
+                        if (start == null) {
+                            start = finger.position
+                            startMs = finger.uptimeMillis
+                        }
                     } else {
                         val first = start
-                        val end = event.changes.firstOrNull()?.position
+                        val end = event.changes.firstOrNull()
                         start = null
                         if (first != null && end != null) {
-                            val delta = end - first
-                            if (abs(delta.x) >= threshold && abs(delta.x) > abs(delta.y)) {
+                            val delta = end.position - first
+                            val quickSwipe = end.uptimeMillis - startMs <= 250L
+                            if ((!reactivePlayer || quickSwipe) && abs(delta.x) >= threshold && abs(delta.x) > abs(delta.y)) {
                                 swipeCallback?.invoke(if (delta.x < 0f) 1 else -1)
                             }
                         }

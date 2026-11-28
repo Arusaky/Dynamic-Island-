@@ -90,11 +90,16 @@ fun SettingsPreview(
                 }
             }
         }
-        if (s.liquidGlass) Text(
-            if (s.reduceEffects) tr("Статичное стекло: включено «Уменьшить эффекты»", "Static glass: Reduce effects is on")
-            else if (onSwipe != null) tr("Листайте события влево или вправо", "Swipe left or right to switch events")
-            else tr("Проведите по стеклу — блики следуют за пальцем", "Drag across the glass to move the reflections"),
-            color = Color.White.copy(alpha = 0.65f), fontSize = 11.sp, lineHeight = 14.sp,
-        )
+        val hint = when {
+            card && scene == PreviewScene.MUSIC && event == null && eventShown && s.playerGradient && !s.reduceEffects ->
+                if (onSwipe != null) tr("Ведите пальцем, чтобы двигать свет. Быстрый свайп меняет событие.",
+                    "Drag to move the light. Swipe quickly to switch events.")
+                else tr("Проведите по плееру — свет последует за пальцем", "Drag across the player to move the light")
+            s.liquidGlass && s.reduceEffects -> tr("Статичное стекло: включено «Уменьшить эффекты»", "Static glass: Reduce effects is on")
+            s.liquidGlass && onSwipe != null -> tr("Листайте события влево или вправо", "Swipe left or right to switch events")
+            s.liquidGlass -> tr("Проведите по стеклу — блики следуют за пальцем", "Drag across the glass to move the reflections")
+            else -> null
+        }
+        if (hint != null) Text(hint, color = Color.White.copy(alpha = 0.65f), fontSize = 11.sp, lineHeight = 14.sp)
     }
 }
