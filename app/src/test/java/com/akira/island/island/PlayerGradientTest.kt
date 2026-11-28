@@ -12,7 +12,8 @@ class PlayerGradientTest {
         for (color in listOf(Color.White, Color.Yellow, Color.Cyan, Color.Red, Color.Black)) {
             val gradient = playerGradientColors(color, Color.White)
             for (stop in listOf(gradient.main, gradient.highlight)) {
-                assertTrue("White controls need a dark background", 1.05f / (stop.luminance() + 0.05f) >= 3f)
+                val contrast = 1.05f / (stop.luminance() + 0.05f)
+                assertTrue("White controls over ${stop} need at least 3:1 contrast, got $contrast", contrast >= 3f)
             }
         }
     }

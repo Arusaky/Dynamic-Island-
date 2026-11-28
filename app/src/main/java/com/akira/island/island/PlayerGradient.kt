@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import com.akira.island.core.MediaInfo
 
 private val PlayerBackdropDark = Color(0xFF110E18)
@@ -30,7 +31,15 @@ private fun darkenForPlayer(color: Color, peakLimit: Float): Color {
     val srgb = color.convert(ColorSpaces.Srgb)
     val peak = maxOf(srgb.red, srgb.green, srgb.blue)
     val scale = peakLimit / peak.coerceAtLeast(0.22f)
-    return lerp(PlayerBackdropDark, Color(srgb.red * scale, srgb.green * scale, srgb.blue * scale), 0.90f)
+    val tint = lerp(PlayerBackdropDark, Color(srgb.red * scale, srgb.green * scale, srgb.blue * scale), 0.90f)
+    val luminance = tint.luminance()
+    if (luminance <= 0.27f) return tint
+
+    // Scale in linear light so vivid colors keep their hue while white playback controls stay legible.
+    val linear = tint.convert(ColorSpaces.LinearSrgb)
+    val dim = 0.27f / luminance
+    return Color(linear.red * dim, linear.green * dim, linear.blue * dim,
+        colorSpace = ColorSpaces.LinearSrgb).convert(ColorSpaces.Srgb)
 }
 
 /**
