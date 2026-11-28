@@ -28,8 +28,6 @@ internal fun MotionPreview() {
     SettingsPreview(card = expanded, scene = scene, onExpand = { expanded = !expanded }, onSwipe = { direction ->
         scene = scenes[Math.floorMod(scenes.indexOf(scene) + direction, scenes.size)]
     })
-    SettingsHint(tr("Смахните пример влево или вправо, чтобы сменить активность.",
-        "Swipe the preview left or right to change the activity."))
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         scenes.chunked(2).forEach { pair ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -46,7 +44,6 @@ internal fun MotionPreview() {
             }
         }
     }
-    if (scene == PreviewScene.TAXI) CompactTaxiPicker()
 }
 
 @Composable

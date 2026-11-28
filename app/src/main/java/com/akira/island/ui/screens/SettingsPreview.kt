@@ -43,6 +43,7 @@ fun SettingsPreview(
     twoActivities: Boolean = false,
     respectVisibility: Boolean = false,
     onSwipe: ((Int) -> Unit)? = null,
+    framed: Boolean = true,
 ) {
     val s by SettingsRepo.state.collectAsState()
     val context = LocalContext.current
@@ -52,9 +53,10 @@ fun SettingsPreview(
     val lightY by animateFloatAsState(light.y, spring(dampingRatio = 1f, stiffness = 250f), label = "glassLightY")
     LaunchedEffect(s.liquidGlass, s.reduceEffects) { light = GlassTilt.Zero }
     LaunchedEffect(s) { IslandType.apply(context, s) }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-        .background(Brush.linearGradient(listOf(Color(0xFF464361), Color(0xFF262B3A)))).padding(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    val frame = if (framed) Modifier.clip(RoundedCornerShape(24.dp))
+        .background(Brush.linearGradient(listOf(Color(0xFF464361), Color(0xFF262B3A)))).padding(12.dp) else Modifier
+    Column(Modifier.fillMaxWidth().then(frame)) {
+        if (framed) Row(verticalAlignment = Alignment.CenterVertically) {
             Text(tr("Живой пример", "Live preview"), color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, modifier = Modifier.weight(1f))
             if (onExpand != null) TextButton(onClick = onExpand, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
                 Text(if (card) tr("Свернуть", "Collapse") else tr("Раскрыть", "Expand"), color = Color.White, fontSize = 12.sp)
@@ -96,10 +98,10 @@ fun SettingsPreview(
                     "Drag to move the light. Swipe quickly to switch events.")
                 else tr("Проведите по плееру — свет последует за пальцем", "Drag across the player to move the light")
             s.liquidGlass && s.reduceEffects -> tr("Статичное стекло: включено «Уменьшить эффекты»", "Static glass: Reduce effects is on")
-            s.liquidGlass && onSwipe != null -> tr("Листайте события влево или вправо", "Swipe left or right to switch events")
+            onSwipe != null -> tr("Листайте события влево или вправо", "Swipe left or right to switch events")
             s.liquidGlass -> tr("Проведите по стеклу — блики следуют за пальцем", "Drag across the glass to move the reflections")
             else -> null
         }
-        if (hint != null) Text(hint, color = Color.White.copy(alpha = 0.65f), fontSize = 11.sp, lineHeight = 14.sp)
+        if (framed && hint != null) Text(hint, color = Color.White.copy(alpha = 0.65f), fontSize = 11.sp, lineHeight = 14.sp)
     }
 }

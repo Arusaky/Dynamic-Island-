@@ -26,8 +26,6 @@ import com.akira.island.island.IslandType
 import com.akira.island.island.island
 import com.akira.island.ui.posOf
 import java.io.File
-import com.akira.island.ui.setup.CapsuleSizeControls
-import com.akira.island.ui.setup.MaterialPicker
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -92,7 +90,6 @@ fun CapsuleScreen(open: (Screen) -> Unit) {
     Page(tr("Оформление", "Appearance"), action = { SettingsSearchAction(open) }) {
         var expanded by rememberSaveable { mutableStateOf(false) }
         SettingsPreview(card = expanded, onExpand = { expanded = !expanded })
-        MaterialPicker(s)
 
         SectionHeader(tr("Положение и размер", "Position and size"))
         Group {
@@ -146,10 +143,7 @@ fun LookScreen(onBack: () -> Unit) {
     var scene by rememberSaveable { mutableStateOf(PreviewScene.MUSIC) }
     Page(tr("Размер и форма", "Size and shape"), onBack, preview = { SettingsPreview(card, scene, onScene = { scene = it }) }) {
         ChoiceStrip(listOf(false, true), card, { if (it) tr("Карточка", "Card") else tr("Капсула", "Capsule") }) { card = it }
-        MaterialPicker(s)
         if (!card) {
-            SectionHeader(tr("Базовый размер", "Base size"))
-            CapsuleSizeControls(s)
             SectionHeader(tr("Капсула с активностью", "Active capsule"))
             SettingsHint(tr("Прибавка к размеру пустой капсулы. Положение и базовый размер настраиваются на экране «Положение и размер».",
                 "Extra size while an activity is present. Set the base size and position in Position and size."))
@@ -252,7 +246,8 @@ fun EffectsScreen(onBack: () -> Unit) {
     var rateDialog by remember { mutableStateOf(false) }
     Page(tr("Эффекты", "Effects"), onBack, action = {
         Text(tr("Сброс", "Reset"), color = Ui.Sub, fontSize = 16.sp, modifier = Modifier.clickable { SettingsRepo.resetEffects() })
-    }, preview = { SettingsPreview(scene = PreviewScene.MUSIC) }) {
+    }) {
+        MotionPreview()
         if (s.reduceEffects) {
             Text(
                 tr("Сейчас включено «Уменьшить эффекты» в «Раскрытии острова» — пока оно включено, эффектов нет",

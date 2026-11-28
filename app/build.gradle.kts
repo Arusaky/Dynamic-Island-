@@ -13,8 +13,8 @@ android {
         applicationId = "com.akira.island"
         minSdk = 26
         targetSdk = 35
-        versionCode = 25
-        versionName = "1.7.3-test.9"
+        versionCode = 26
+        versionName = "1.7.3-test.10"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

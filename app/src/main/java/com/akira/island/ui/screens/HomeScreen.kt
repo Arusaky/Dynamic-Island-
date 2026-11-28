@@ -48,7 +48,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -144,6 +143,9 @@ fun HomeScreen(open: (Screen) -> Unit) {
     val missing = perms.missing
 
     Page(tr("Динамический остров", "Dynamic Island")) {
+        IslandPreview()
+        UpdateSection()
+
         // Без службы спец. возможностей острова нет вовсе — это первый шаг
         if (!perms.accessibility) {
             StartCard(onOpen = { Perms.openAccessibility(context) }, onHelp = { open(Screen.INSTRUCTION) })
@@ -171,11 +173,6 @@ fun HomeScreen(open: (Screen) -> Unit) {
             },
             s.enabled, color = Tile.Green,
         ) { v -> SettingsRepo.update { copy(enabled = v) } }
-
-        var expanded by remember { mutableStateOf(false) }
-        SettingsPreview(card = expanded, onExpand = { expanded = !expanded })
-        HomeShortcuts(open)
-        UpdateSection()
 
         Group {
             GroupItem(
@@ -351,7 +348,6 @@ fun TestsScreen(onBack: () -> Unit) {
     val demos = remember { demos(context) }
     Page(tr("Проверка", "Try it"), onBack,
         subtitle = tr("Нажмите — пример появится в острове наверху экрана", "Tap — the example shows up in the island at the top of the screen")) {
-        MotionPreview()
         demos.chunked(2).forEach { row ->
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { d ->
@@ -479,5 +475,5 @@ fun Arrow() {
 /** Живой пример капсулы с текущими настройками: толщина, боковые части, цвет и контур. */
 @Composable
 fun IslandPreview(expanded: Boolean = false) {
-    SettingsPreview(card = expanded)
+    SettingsPreview(card = expanded, framed = false)
 }
