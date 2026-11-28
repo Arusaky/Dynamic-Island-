@@ -13,6 +13,14 @@ class GlassOpticsTest {
         var previous = 0f
         for (i in 40..100) { val density = glassBodyDensity(i / 100f); assertTrue(density > previous); previous = density }
     }
+    @Test fun `background dimming is optional and stays translucent at full strength`() {
+        assertEquals(0f, glassFallbackDensity(0), 0f)
+        assertTrue(glassFallbackDensity(45) > glassBodyDensity(0.68f))
+        assertTrue(glassFallbackDensity(100) > glassFallbackDensity(45))
+        assertTrue(glassFallbackDensity(100) < 1f)
+        assertEquals(glassFallbackDensity(100), glassFallbackDensity(101), 0f)
+    }
+
     @Test fun `capsules cards and circles retain finite bounded geometry`() {
         for ((w, h) in listOf(240f to 32f, 320f to 240f, 40f to 40f, 150f to 400f)) {
             val model = GlassOptics(w, h, 2f)

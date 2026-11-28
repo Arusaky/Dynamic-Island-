@@ -34,6 +34,7 @@ import android.widget.Toast
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -53,6 +54,8 @@ import com.akira.island.data.SettingsRepo
 import com.akira.island.island.Egg
 import com.akira.island.island.ISLAND_PAD_DP
 import com.akira.island.island.LocalCameraDepth
+import com.akira.island.island.LocalNativeIslandBackdrop
+import com.akira.island.island.NativeIslandBackdrop
 import com.akira.island.island.IslandOverlay
 import com.akira.island.island.IslandTheme
 import com.akira.island.island.IslandType
@@ -95,6 +98,9 @@ class IslandService : AccessibilityService() {
     private var networkRateMonitor: NetworkRateMonitor? = null
     private var backdrop: IslandBackdropBlur? = null
     private var bubbleBackdrop: IslandBackdropBlur? = null
+    private val bodyBlurApplied = mutableStateOf(false)
+    private val bubbleBlurApplied = mutableStateOf(false)
+    private val nativeBackdrop = NativeIslandBackdrop(bodyBlurApplied, bubbleBlurApplied)
     private var backdropGeometry: com.akira.island.island.BackdropGeometry? = null
     private var backdropPending = false
     private var backdropSampler: (() -> Unit)? = null
@@ -377,7 +383,10 @@ class IslandService : AccessibilityService() {
                         val depths by cameraDepths.collectAsState()
                         val depth = depths[when { rotation < 0 -> 1; rotation > 0 -> 2; else -> 0 }]
                         Rotated(rotation) {
-                            CompositionLocalProvider(LocalCameraDepth provides depth) {
+                            CompositionLocalProvider(
+                                LocalCameraDepth provides depth,
+                                LocalNativeIslandBackdrop provides nativeBackdrop,
+                            ) {
                                 IslandOverlay(
                                     // До целых пикселей: доли пикселя в конце пружины не двигают окна
                                     onBodyBounds = { r -> val q = r.snapped(); if (q != body) { body = q; onBoundsChanged() } },
@@ -487,7 +496,7 @@ class IslandService : AccessibilityService() {
         if (backdropClosed || (backdrop == null && (!SettingsRepo.current.liquidGlass || Build.VERSION.SDK_INT < 31))) return
         val s = SettingsRepo.current
         if (!s.enabled || !visible || !IslandBus.screenOn.value || IslandBus.locked.value ||
-            IslandBus.powerSave.value || s.reduceEffects || !s.liquidGlass) {
+            (s.batterySaver && IslandBus.powerSave.value) || s.reduceEffects || !s.liquidGlass) {
             backdrop?.hide(); bubbleBackdrop?.hide()
         }
         if (backdropPending) return
@@ -500,7 +509,8 @@ class IslandService : AccessibilityService() {
     private fun updateBackdrop() {
         val s = SettingsRepo.current
         val allowed = backdropAllowed(s.liquidGlass, s.enabled, visible && display?.alpha == 1f,
-            IslandBus.screenOn.value, IslandBus.locked.value, IslandBus.powerSave.value, s.reduceEffects, backdropGeometry?.usable == true)
+            IslandBus.screenOn.value, IslandBus.locked.value, s.batterySaver && IslandBus.powerSave.value,
+            s.reduceEffects, backdropGeometry?.usable == true)
         if (!allowed || Build.VERSION.SDK_INT < 31) {
             backdrop?.hide(); bubbleBackdrop?.hide()
             if (!s.liquidGlass) {
@@ -512,13 +522,15 @@ class IslandService : AccessibilityService() {
         val view = display ?: return
         val geometry = backdropGeometry
         if (geometry != null && backdropTransmits(s, geometry.card) && !body.isEmpty && !geometry.area.isEmpty) {
-            val layer = backdrop ?: IslandBackdropBlur(this, view).also { backdrop = it }
+            val layer = backdrop ?: IslandBackdropBlur(this, view) { bodyBlurApplied.value = it }
+                .also { backdrop = it }
             layer.update(android.graphics.Rect(ceil(geometry.area.left).toInt(), ceil(geometry.area.top).toInt(),
                 floor(geometry.area.right).toInt(), floor(geometry.area.bottom).toInt()), geometry.bottomRadius, true,
                 geometry.topRadius, strengthPercent = s.glassBlurStrength)
         } else backdrop?.hide()
         if (!IslandBus.expanded.value && !bubble.isEmpty && backdropTransmits(s, card = false)) {
-            val layer = bubbleBackdrop ?: IslandBackdropBlur(this, view).also { bubbleBackdrop = it }
+            val layer = bubbleBackdrop ?: IslandBackdropBlur(this, view) { bubbleBlurApplied.value = it }
+                .also { bubbleBackdrop = it }
             layer.update(android.graphics.Rect(floor(bubble.left).toInt(), floor(bubble.top).toInt(),
                 ceil(bubble.right).toInt(), ceil(bubble.bottom).toInt()), minOf(bubble.width, bubble.height)/2f, true,
                 strengthPercent = s.glassBlurStrength)

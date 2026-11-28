@@ -25,12 +25,12 @@ import com.akira.island.service.glassBlurRadiusDp
 
 /** Local sample only: the effect touches the background, never the foreground text. */
 @Composable
-internal fun BlurStrengthPreview(strength: Int, enabled: Boolean) {
+internal fun BlurStrengthPreview(strength: Int) {
     val radius = with(LocalDensity.current) { glassBlurRadiusDp(strength).dp.toPx() }
     Box(Modifier.fillMaxWidth().height(88.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xFF242532))
         .testTag("glass-blur-preview"), contentAlignment=Alignment.Center) {
         Canvas(Modifier.matchParentSize().graphicsLayer {
-            renderEffect = if(Build.VERSION.SDK_INT>=31 && enabled && radius>0f)
+            renderEffect = if(Build.VERSION.SDK_INT >= 31 && radius > 0f)
                 BlurEffect(radius,radius,TileMode.Clamp) else null
         }) {
             drawRect(Brush.linearGradient(listOf(Color(0xFF6861DB),Color(0xFF2D9AA9),Color(0xFF463C7B))))

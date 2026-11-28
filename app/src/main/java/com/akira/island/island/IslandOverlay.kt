@@ -669,6 +669,7 @@ internal fun IslandBody(
             }
         }
     }
+    val frost = islandGlassFrost(s)
     val sampleBackdrop by rememberUpdatedState(newValue = { reportBackdrop() })
     DisposableEffect(onBackdropSampler, onBackdropShape) {
         reportedBackdrop[0] = null
@@ -704,7 +705,7 @@ internal fun IslandBody(
                 if (calibrating) Modifier.clip(shape).background(CalibrationRed).border(2.dp, Color.White, shape)
                 else Modifier.islandSurface(s, large, shape, accent, tilt = { previewTilt ?: tilt.value },
                     sheen = { sheen.value }, activityBackdrop = playerBackdrop,
-                    touchHighlight = playerHighlight),
+                    touchHighlight = playerHighlight, frostDensity = frost),
             )
             .then(
                 if (egg && !calibrating) {
@@ -1100,10 +1101,11 @@ private fun BubbleContent(act: Act, s: IslandSettings) {
     val previewTilt = LocalGlassTilt.current
     val now = rememberNow(500, active = act is Act.TimerA)
     val chargeWave = (act as? Act.ChargingA)?.waveStartedAt?.let { chargingWave(s, it) } ?: Modifier
+    val frost = islandGlassFrost(s, bubble = true)
     Box(
         Modifier
             .size(h)
-            .islandSurface(s, false, CircleShape, act.surfaceAccent(), tilt = { previewTilt ?: tilt.value })
+            .islandSurface(s, false, CircleShape, act.surfaceAccent(), tilt = { previewTilt ?: tilt.value }, frostDensity = frost)
             .then(chargeWave)
             .clickable(enabled = !act.transient) {
                 haptic()

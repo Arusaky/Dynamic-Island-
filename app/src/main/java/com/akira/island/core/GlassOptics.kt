@@ -11,6 +11,10 @@ internal fun glassBodyDensity(value: Float): Float {
     return density * density
 }
 
+/** Keep the material legible when Android cannot blur the window under it. */
+internal fun glassFallbackDensity(strength: Int): Float =
+    if (strength <= 0) 0f else 0.74f + 0.22f * strength.coerceAtMost(100) / 100f
+
 /** Geometry for our glass lighting. Reused by a surface; update does not allocate a frame object. */
 internal class GlassOptics(widthPx: Float, heightPx: Float, unitPx: Float = 1f) {
     private fun dimension(value: Float) = if (value.isFinite()) value.coerceIn(0f, 1_000_000f) else 0f

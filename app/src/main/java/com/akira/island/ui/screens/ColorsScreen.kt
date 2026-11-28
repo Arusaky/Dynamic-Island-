@@ -151,7 +151,7 @@ fun ColorsScreen(onBack: () -> Unit) {
             }
             SettingsHint(tr("0% — без размытия, 50% — стандартное, 100% — сильное. Меняется фон, текст и кнопки остаются чёткими.",
                 "0%: no blur, 50%: standard, 100%: strong. Only the background changes; text and buttons stay sharp."))
-            BlurStrengthPreview(s.glassBlurStrength,blurAvailable && !s.reduceEffects)
+            BlurStrengthPreview(s.glassBlurStrength)
         }
         GroupSlider(Pos.Single, Icons.Rounded.Gradient, tr("Затемнение снизу", "Bottom shading"), s.bottomGradient.toFloat(), 0f..80f, "${s.bottomGradient}%", color = Tile.Indigo) {
             v -> SettingsRepo.update { copy(bottomGradient = v.toInt()) }
@@ -159,7 +159,7 @@ fun ColorsScreen(onBack: () -> Unit) {
         SettingsHint(tr("Затемнение видно на светлой заливке. На чёрном цвете разницы не будет.", "Bottom shading is visible on light fills. It has no visible effect on black."))
         if (s.liquidGlass) SettingsHint(when {
             s.reduceEffects -> tr("Размытие отключено режимом уменьшения эффектов; материал стекла сохранён.", "Blur is disabled by Reduce effects; the glass material is retained.")
-            blurRejected || !blurAvailable -> tr("Системное размытие сейчас недоступно; прозрачность и блики стекла сохраняются.", "System blur is currently unavailable; glass transparency and reflections remain.")
+            blurRejected || !blurAvailable -> tr("Системное размытие сейчас недоступно. Стекло приглушает фон, чтобы содержимое острова оставалось читаемым.", "System blur is currently unavailable. The glass dims the background to keep island controls readable.")
             !islandRunning -> tr("Размытие встроено в стекло и появится после включения острова.", "Blur is part of the glass and appears when the island is running.")
             s.glassBlurStrength == 0 -> tr("Размытие выключено; прозрачность и блики стекла сохраняются.", "Blur is off; glass transparency and reflections remain.")
             else -> tr("Сила размытия меняет фон, плотность стекла — его заливку. Изменения применяются к острову и второму кружочку.",

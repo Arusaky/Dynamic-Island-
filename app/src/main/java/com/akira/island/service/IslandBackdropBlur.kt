@@ -31,7 +31,11 @@ internal fun backdropTransmits(s: com.akira.island.data.IslandSettings, card: Bo
 
 /** Public attached sub-window: its negative media sub-layer keeps it below its parent. */
 @SuppressLint("RtlHardcoded") // Bounds are physical parent-window coordinates, not leading-edge offsets.
-internal class IslandBackdropBlur(private val context: Context, private val parent: View) : AutoCloseable {
+internal class IslandBackdropBlur(
+    private val context: Context,
+    private val parent: View,
+    private val onApplied: (Boolean) -> Unit = {},
+) : AutoCloseable {
     companion object {
         private val rejection = MutableStateFlow(false)
         val windowRejected = rejection.asStateFlow()
@@ -51,8 +55,21 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
     private var listening = false
     private var corrections = 0
     private var appliedBlurRadius = -1
+    private var applied = false
     private var positionBiasX = 0
     private var positionBiasY = 0
+
+    private fun reportApplied(value: Boolean) {
+        if (applied == value) return
+        applied = value
+        onApplied(value)
+    }
+
+    private fun conceal() {
+        dialog?.hide()
+        reportApplied(false)
+    }
+
     private fun setBlurRadius(window: android.view.Window, radius: Int) {
         if (Build.VERSION.SDK_INT >= 31 && appliedBlurRadius != radius) {
             window.setBackgroundBlurRadius(radius)
@@ -73,11 +90,15 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
             val dy = screen[1] - local[1] + bounds.top - actual[1]
             val sized = w.decorView.width == bounds.width() && w.decorView.height == bounds.height()
             if (dx == 0 && dy == 0 && sized) {
-                setBlurRadius(w, requestedBlurRadius())
+                val radius = if (supported) requestedBlurRadius() else 0
+                setBlurRadius(w, radius)
+                reportApplied(radius > 0 && showing)
             } else {
                 setBlurRadius(w, 0)
                 if (corrections++ < 2) w.attributes = w.attributes.apply {
                     x += dx; y += dy; width = bounds.width(); height = bounds.height()
+                } else {
+                    reportApplied(false)
                 }
             }
         }
@@ -87,6 +108,7 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
     private val attach = object : View.OnAttachStateChangeListener {
         override fun onViewAttachedToWindow(v: View) = render()
         override fun onViewDetachedFromWindow(v: View) {
+            reportApplied(false)
             runCatching { dialog?.dismiss() }; dialog = null
         }
     }
@@ -121,7 +143,8 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
     private fun render() {
         if (closed) return
         if (!wanted || blurStrength == 0 || bounds.isEmpty || !supported || !parent.isAttachedToWindow) {
-            dialog?.hide(); return
+            conceal()
+            return
         }
         if (Build.VERSION.SDK_INT < 31) return
         runCatching {
@@ -173,15 +196,20 @@ internal class IslandBackdropBlur(private val context: Context, private val pare
         }.onFailure {
             failed = true
             rejection.value = true
+            reportApplied(false)
             runCatching { dialog?.dismiss() }; dialog = null
         }
     }
 
-    fun hide() { wanted = false; dialog?.hide() }
+    fun hide() {
+        wanted = false
+        conceal()
+    }
 
     override fun close() {
         if (closed) return
         closed = true
+        reportApplied(false)
         parent.removeOnAttachStateChangeListener(attach)
         if (Build.VERSION.SDK_INT >= 31 && listening) runCatching { manager.removeCrossWindowBlurEnabledListener(listener) }
         runCatching { dialog?.dismiss() }; dialog = null

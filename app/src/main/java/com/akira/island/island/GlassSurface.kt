@@ -72,6 +72,7 @@ fun Modifier.glassSurface(
     opacity: Float,
     tilt: () -> GlassTilt = { GlassTilt.Zero },
     sheen: () -> Float = { -1f },
+    minimumDensity: Float = 0f,
 ): Modifier = composed {
     // Keep compilation outside drawWithCache: resizing must never compile a shader per frame.
     val lens = remember {
@@ -88,7 +89,7 @@ fun Modifier.glassSurface(
             is Outline.Rounded -> Path().apply { addRoundRect(outline.roundRect) }
             is Outline.Rectangle -> Path().apply { addRect(outline.rect) }
         }
-        val density = glassBodyDensity(opacity)
+        val density = maxOf(glassBodyDensity(opacity), minimumDensity)
         if (Build.VERSION.SDK_INT >= 33 && lens != null && outline !is Outline.Generic) {
             lens.configure(size, outline, base, density, optics.lensWidth, optics.lip)
             val softwareBody = base.copy(alpha = base.alpha * density)
